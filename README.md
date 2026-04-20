@@ -7,8 +7,9 @@ This repository now has a working **Deliverable 1 data pipeline** for:
 1. Building configurable known-word lists
 2. Downloading a Wikipedia subset
 3. Preprocessing the articles
-4. Running the vocabulary analysis module
-5. Producing candidate article rows by vocabulary level
+4. Tokenizing cleaned articles with an LLM-compatible subword tokenizer
+5. Running the vocabulary analysis module
+6. Producing candidate article rows by vocabulary level
 
 ---
 
@@ -48,7 +49,7 @@ This keeps the runtime totals aligned with the rubric while still modeling cumul
 MyLittleLibrary/
 ├── data/
 │   ├── raw/                          # raw Wikipedia parquet files
-│   ├── processed/                    # cleaned Wikipedia parquet files
+│   ├── processed/                    # cleaned + tokenized Wikipedia parquet files
 │   └── vocab/                        # runtime vocab text files used by analysis
 │       ├── beginner_1000.txt
 │       ├── intermediate_3000.txt
@@ -62,6 +63,7 @@ MyLittleLibrary/
 │   ├── build_vocab_lists.py
 │   ├── download_wiki.py
 │   ├── preprocess_wiki.py
+│   ├── tokenize_articles.py
 │   ├── analyze_articles.py
 │   └── check_article_stats.py
 ├── vocab_sources/                    # source CSV/TXT vocab files
@@ -123,14 +125,35 @@ Current patched behavior:
 - supports `--output`
 - supports `--min-words`
 
+### `scripts/tokenize_articles.py`
+Reads the cleaned wiki parquet and tokenizes each article with a Hugging Face / LLaMA-compatible tokenizer.
+
+Current intended behavior:
+- supports `--input`
+- supports `--output`
+- supports `--tokenizer`
+- supports `--max-length`
+- supports `--batch-size`
+
+Expected tokenization outputs in the parquet:
+- `llm_tokenizer_name`
+- `llm_input_ids_json`
+- `llm_attention_mask_json`
+- `llm_token_count`
+
+This script is the new Deliverable 1 step that prepares article text for actual LLM-style subword input instead of relying only on regex word tokenization.
+
 ### `scripts/analyze_articles.py`
-Reads the cleaned wiki parquet and the three runtime vocab files, then computes:
+Reads the tokenized wiki parquet and the three runtime vocab files, then computes:
 
 - total word count
 - unique word count
 - coverage ratio
 - new-word count/list
 - readability score
+- LLM token count if present
+- tokenizer name if present
+- word-to-LLM-token ratio if present
 - candidate flag based on a coverage window
 
 Current patched behavior:
@@ -139,6 +162,10 @@ Current patched behavior:
 - supports optional custom vocab file paths
 - supports `--coverage-min`
 - supports `--coverage-max`
+
+Important note:
+- word-level regex tokenization is still used inside this script for vocabulary coverage because the project vocab files are stored as whole words
+- LLM subword tokenization now happens earlier in the pipeline inside `tokenize_articles.py`
 
 ### `scripts/check_article_stats.py`
 Reads an article-stats JSONL file and prints:
@@ -173,13 +200,19 @@ Upgrade pip and install the packages needed for Deliverable 1:
 
 ```powershell
 python -m pip install --upgrade pip
-python -m pip install pandas pyarrow datasets textstat
+python -m pip install pandas pyarrow datasets textstat transformers
+```
+
+If your selected tokenizer depends on SentencePiece, also install:
+
+```powershell
+python -m pip install sentencepiece
 ```
 
 Verify imports:
 
 ```powershell
-python -c "import pandas, pyarrow, datasets, textstat; print('deps ok')"
+python -c "import pandas, pyarrow, datasets, textstat, transformers; print('deps ok')"
 ```
 
 ---
@@ -312,29 +345,58 @@ python scripts/download_wiki.py --sample-size 100000 --output data/raw/wiki_100k
 
 ---
 
-## Step 4: Preprocess and analyze the articles
+## Step 4: Preprocess the articles
 
-### Step 4A: Preprocess
-
-Small sample:
+### Small sample
 
 ```powershell
 python scripts/preprocess_wiki.py --input data/raw/wiki_sample.parquet --output data/processed/wiki_clean.parquet
 ```
 
-50k raw run:
+### 50k raw run
 
 ```powershell
 python scripts/preprocess_wiki.py --input data/raw/wiki_50k.parquet --output data/processed/wiki_50k_clean.parquet
 ```
 
-100k raw run:
+### 100k raw run
 
 ```powershell
 python scripts/preprocess_wiki.py --input data/raw/wiki_100k.parquet --output data/processed/wiki_100k_clean.parquet
 ```
 
-### Step 4B: Analyze article vocabulary
+---
+
+## Step 5: Tokenize cleaned articles for LLM input
+
+This is the new pipeline step added for Deliverable 1 so the corpus is prepared with a real subword tokenizer before analysis.
+
+### Small sample
+
+```powershell
+python scripts/tokenize_articles.py --input data/processed/wiki_clean.parquet --output data/processed/wiki_tokenized.parquet --tokenizer meta-llama/Llama-3.2-1B-Instruct --max-length 2048
+```
+
+### 50k cleaned run
+
+```powershell
+python scripts/tokenize_articles.py --input data/processed/wiki_50k_clean.parquet --output data/processed/wiki_50k_tokenized.parquet --tokenizer meta-llama/Llama-3.2-1B-Instruct --max-length 2048
+```
+
+### 100k cleaned run
+
+```powershell
+python scripts/tokenize_articles.py --input data/processed/wiki_100k_clean.parquet --output data/processed/wiki_100k_tokenized.parquet --tokenizer meta-llama/Llama-3.2-1B-Instruct --max-length 2048
+```
+
+Expected effect:
+- the cleaned parquet is converted into a tokenized parquet
+- each row now includes LLM-oriented subword token data
+- `analyze_articles.py` can now report LLM token counts alongside word-level vocabulary coverage
+
+---
+
+## Step 6: Analyze article vocabulary
 
 Current working candidate window for general Wikipedia debug/reporting runs:
 
@@ -343,22 +405,22 @@ Current working candidate window for general Wikipedia debug/reporting runs:
 
 This is lower than the rubric example window of 0.90–0.97, but the window is configurable and this lower range produced usable candidate counts on the current Wikipedia corpus.
 
-Small sample:
+### Small sample
 
 ```powershell
-python scripts/analyze_articles.py --input data/processed/wiki_clean.parquet --output outputs/article_stats.jsonl --coverage-min 0.45 --coverage-max 0.70
+python scripts/analyze_articles.py --input data/processed/wiki_tokenized.parquet --output outputs/article_stats.jsonl --coverage-min 0.45 --coverage-max 0.70
 ```
 
-50k raw / cleaned run:
+### 50k tokenized run
 
 ```powershell
-python scripts/analyze_articles.py --input data/processed/wiki_50k_clean.parquet --output outputs/article_stats_50k.jsonl --coverage-min 0.45 --coverage-max 0.70
+python scripts/analyze_articles.py --input data/processed/wiki_50k_tokenized.parquet --output outputs/article_stats_50k.jsonl --coverage-min 0.45 --coverage-max 0.70
 ```
 
-100k raw / cleaned run:
+### 100k tokenized run
 
 ```powershell
-python scripts/analyze_articles.py --input data/processed/wiki_100k_clean.parquet --output outputs/article_stats_100k.jsonl --coverage-min 0.45 --coverage-max 0.70
+python scripts/analyze_articles.py --input data/processed/wiki_100k_tokenized.parquet --output outputs/article_stats_100k.jsonl --coverage-min 0.45 --coverage-max 0.70
 ```
 
 ### What analysis computes
@@ -371,13 +433,16 @@ For each article and for each vocabulary level, the analyzer computes:
 - `New_Word_Count`
 - `New_Words`
 - `Flesch_Kincaid_Grade`
+- `LLM_Token_Count`
+- `Tokenizer_Name`
+- `Word_to_LLM_Token_Ratio`
 - `Candidate`
 
 A row is a **candidate row** when its article coverage ratio falls within the configured coverage window for that level.
 
 ---
 
-## Step 5: Check the analysis output
+## Step 7: Check the analysis output
 
 Small sample:
 
@@ -385,13 +450,13 @@ Small sample:
 python scripts/check_article_stats.py
 ```
 
-50k cleaned run:
+50k tokenized run:
 
 ```powershell
 python scripts/check_article_stats.py --input outputs/article_stats_50k.jsonl --window 0.45:0.70 --window 0.50:0.75 --window 0.55:0.80
 ```
 
-100k cleaned run:
+100k tokenized run:
 
 ```powershell
 python scripts/check_article_stats.py --input outputs/article_stats_100k.jsonl --window 0.45:0.70 --window 0.50:0.75 --window 0.55:0.80
@@ -471,6 +536,7 @@ The repository now supports:
 - cumulative runtime known-word files
 - reproducible raw Wikipedia download
 - reproducible preprocessing
+- reproducible LLM-compatible subword tokenization of cleaned articles
 - article-level vocabulary analysis
 - candidate filtering by configurable known-word coverage
 - analysis summaries over a 50k+ cleaned article corpus
@@ -479,7 +545,7 @@ This covers the core of **Deliverable 1** before embeddings/vector search are ad
 
 ---
 
-## 9. Next steps after Step 4 / Deliverable 1 analysis
+## 9. Next steps after Step 6 / Deliverable 1 analysis
 
 The next work should be:
 
@@ -505,6 +571,18 @@ python -m pip install textstat
 
 ```powershell
 python -m pip install datasets
+```
+
+### `ModuleNotFoundError: No module named 'transformers'`
+
+```powershell
+python -m pip install transformers
+```
+
+### Some tokenizers fail because SentencePiece is not installed
+
+```powershell
+python -m pip install sentencepiece
 ```
 
 ### `Unable to find a usable engine` for parquet
@@ -539,13 +617,20 @@ Do **not** hardcode tokens into source files or commit them to git.
 
 ## 11. Suggested requirements.txt for current pipeline
 
-At minimum for Steps 1 through 4:
+At minimum for Steps 1 through 6:
 
 ```txt
 pandas
 pyarrow
 datasets
 textstat
+transformers
+```
+
+If your tokenizer needs it, also include:
+
+```txt
+sentencepiece
 ```
 
 A more exact frozen version can be generated with:
@@ -571,6 +656,7 @@ Recommended commit checkpoints:
 - runtime vocab files generated
 - wiki download working
 - preprocessing working
+- tokenization working
 - analysis output generated
 - README and requirements updated
 

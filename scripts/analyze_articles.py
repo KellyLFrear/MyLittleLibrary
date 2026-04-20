@@ -3,14 +3,15 @@
 analyze_articles.py
 
 Purpose:
-- Compare each cleaned Wikipedia article against the project vocabulary lists
+- Compare each tokenized Wikipedia article against the project vocabulary lists
 - Compute article coverage for Beginner / Intermediate / Advanced
 - Estimate readability with Flesch-Kincaid grade
+- Record optional LLM tokenizer metadata if present in the parquet input
 - Mark whether an article falls inside a chosen coverage window
 - Write one JSON record per article-level pair to article_stats.jsonl
 
 Important idea:
-Each cleaned article is analyzed three separate times:
+Each tokenized article is analyzed three separate times:
 1) once using the beginner vocabulary
 2) once using the intermediate vocabulary
 3) once using the advanced vocabulary
@@ -30,7 +31,7 @@ import pandas as pd
 import textstat
 
 
-DEFAULT_INPUT = "data/processed/wiki_clean.parquet"
+DEFAULT_INPUT = "data/processed/wiki_tokenized.parquet"
 DEFAULT_OUTPUT = "outputs/article_stats.jsonl"
 DEFAULT_VOCABS = {
     "Beginner": "data/vocab/beginner_1000.txt",
@@ -38,9 +39,14 @@ DEFAULT_VOCABS = {
     "Advanced": "data/vocab/advanced_6000.txt",
 }
 
-# Basic tokenizer pattern:
+# Basic word tokenizer pattern for the vocabulary-coverage portion of the analysis:
 # - keeps alphabetic words
 # - allows apostrophes inside words
+#
+# Note:
+# This script still uses word-level tokens for vocabulary coverage because the
+# project vocab lists are stored as whole words. LLM subword tokenization is
+# handled earlier in the pipeline by tokenize_articles.py.
 WORD_RE = re.compile(r"[a-zA-Z']+")
 
 
@@ -49,12 +55,12 @@ def parse_args() -> argparse.Namespace:
     Read command-line arguments for the analysis step.
     """
     parser = argparse.ArgumentParser(
-        description="Analyze cleaned articles against vocabulary lists and write JSONL stats."
+        description="Analyze tokenized articles against vocabulary lists and write JSONL stats."
     )
     parser.add_argument(
         "--input",
         default=DEFAULT_INPUT,
-        help="Input cleaned parquet file. Default: data/processed/wiki_clean.parquet",
+        help="Input tokenized parquet file. Default: data/processed/wiki_tokenized.parquet",
     )
     parser.add_argument(
         "--output",
@@ -118,7 +124,17 @@ def flesch_kincaid_grade(text: str) -> float:
 
 def validate_columns(df: pd.DataFrame) -> None:
     """
-    Make sure the cleaned parquet has the columns required by this script.
+    Make sure the input parquet has the columns required by this script.
+
+    Required columns:
+    - title
+    - clean_text
+
+    Optional columns that may come from tokenize_articles.py:
+    - llm_token_count
+    - llm_tokenizer_name
+    - llm_input_ids_json
+    - llm_attention_mask_json
     """
     required = {"title", "clean_text"}
     missing = required - set(df.columns)
@@ -166,12 +182,15 @@ def analyze_articles(
     Analyze each article against each vocabulary list.
 
     For every (article, level) pair this script computes:
-    - Total_Words: total number of tokens
-    - Unique_Words: number of distinct tokens
+    - Total_Words: total number of word-level tokens
+    - Unique_Words: number of distinct word-level tokens
     - Coverage_Ratio: fraction of tokens already in the known-word list
     - New_Word_Count: number of unique unknown words
     - New_Words: a preview of up to 30 unknown words
     - Flesch_Kincaid_Grade: readability estimate
+    - LLM_Token_Count: number of subword tokens if present in the tokenized parquet
+    - Tokenizer_Name: tokenizer name used earlier in the pipeline if present
+    - Word_to_LLM_Token_Ratio: rough comparison between word count and LLM token count
     - Candidate: whether the coverage ratio falls inside the chosen window
     """
     if coverage_min > coverage_max:
@@ -201,7 +220,7 @@ def analyze_articles(
             print(f"Processing {level} level...")
             known_words = load_word_list(vocab_path)
 
-            # Loop through all cleaned articles.
+            # Loop through all cleaned/tokenized articles.
             for _, row in df.iterrows():
                 text = row["clean_text"]
                 tokens = tokenize_words(text)
@@ -223,6 +242,28 @@ def analyze_articles(
 
                 readability = flesch_kincaid_grade(text)
 
+                # Newly added:
+                # If tokenize_articles.py was run earlier, the parquet may already
+                # contain the number of LLM subword tokens for this article.
+                # Keep it optional so this script can still run on older parquet files.
+                llm_token_count = None
+                if "llm_token_count" in df.columns and pd.notna(row["llm_token_count"]):
+                    llm_token_count = int(row["llm_token_count"])
+
+                # Newly added:
+                # Record which tokenizer created the subword tokens when that metadata
+                # is available in the input parquet.
+                tokenizer_name = ""
+                if "llm_tokenizer_name" in df.columns and pd.notna(row["llm_tokenizer_name"]):
+                    tokenizer_name = str(row["llm_tokenizer_name"])
+
+                # Newly added:
+                # This ratio is a quick diagnostic showing how many word-level tokens
+                # correspond to each LLM subword token count for the same article.
+                word_to_llm_ratio = None
+                if llm_token_count:
+                    word_to_llm_ratio = total_words / llm_token_count
+
                 # Candidate means the article falls inside the target "sweet spot"
                 # for known-word coverage.
                 is_candidate = coverage_min <= coverage_ratio <= coverage_max
@@ -237,6 +278,9 @@ def analyze_articles(
                     "New_Word_Count": new_word_count,
                     "New_Words": ", ".join(article_new_words[:30]),
                     "Flesch_Kincaid_Grade": readability,
+                    "LLM_Token_Count": llm_token_count,
+                    "Tokenizer_Name": tokenizer_name,
+                    "Word_to_LLM_Token_Ratio": word_to_llm_ratio,
                     "Candidate": is_candidate,
                 }
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
