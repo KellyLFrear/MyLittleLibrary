@@ -103,7 +103,8 @@ def main() -> None:
     p.add_argument("--model-path",      default="models/llama-3.1-8b-instruct.Q4_K_M.gguf",
                    help="Path to GGUF model file (used when --generator llama)")
     p.add_argument("--n-gpu-layers",    type=int, default=-1)
-    p.add_argument("--no-cross-encoder", action="store_true", default=True)
+    p.add_argument("--no-cross-encoder", action="store_true",
+                   help="Disable cross-encoder reranker (uses bi-encoder scores only; faster)")
     p.add_argument("--no-gpu-index",    action="store_true")
     p.add_argument("--with-bertscore",  action="store_true",
                    help="Also compute BERTScore (slow, requires bert-score package)")
