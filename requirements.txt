@@ -21,8 +21,9 @@ llama-cpp-python==0.2.77
 
 # ── PyTorch (GPU) ─────────────────────────────────────────────────────────────
 # Install the CUDA-enabled wheel directly:
-#   pip install torch==2.3.0+cu118 --index-url https://download.pytorch.org/whl/cu118
-torch==2.3.0
+#   pip install torch==2.6.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+# 2.6.0 patches CVE: torch.load with weights_only=True RCE (fixed in 2.6.0)
+torch==2.6.0
 
 # ── RAG evaluation ────────────────────────────────────────────────────────────
 rouge-score==0.1.2
