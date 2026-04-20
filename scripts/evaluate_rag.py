@@ -13,7 +13,7 @@ Usage
 -----
     python scripts/evaluate_rag.py                         # template generator, no cross-encoder
     python scripts/evaluate_rag.py --generator llama       # llama.cpp GPU
-        --model-path models/llama-3.1-8b-instruct.Q4_K_M.gguf
+        --model-path models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
     python scripts/evaluate_rag.py --with-bertscore        # slow but complete
 """
 from __future__ import annotations
@@ -100,9 +100,11 @@ def main() -> None:
     p.add_argument("--device",          default="cuda",
                    help="Torch device: 'cuda' (default) or 'cpu'")
     p.add_argument("--generator",       choices=["template", "llama"], default="template")
-    p.add_argument("--model-path",      default="models/llama-3.1-8b-instruct.Q4_K_M.gguf",
+    p.add_argument("--model-path",      default="models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
                    help="Path to GGUF model file (used when --generator llama)")
     p.add_argument("--n-gpu-layers",    type=int, default=-1)
+    p.add_argument("--top-broad",       type=int, default=200,
+                   help="Number of candidates for reranking before final ranking")
     p.add_argument("--no-cross-encoder", action="store_true",
                    help="Disable cross-encoder reranker (uses bi-encoder scores only; faster)")
     p.add_argument("--no-gpu-index",    action="store_true")
@@ -123,8 +125,10 @@ def main() -> None:
         use_cross_encoder=not args.no_cross_encoder,
         device=args.device,
     )
-    # Use all chunks for broad retrieval (no cap larger than index)
-    top_broad = len(store.chunks)
+    # FAISS GPU indexes support top-k up to 2048 per query.
+    # Keep broad retrieval within that bound and avoid oversized cross-encoder batches.
+    gpu_k_limit = 2048 if use_gpu_index else len(store.chunks)
+    top_broad = min(len(store.chunks), gpu_k_limit, max(1, args.top_broad))
     retriever = TwoStageRetriever(store, embedder, reranker, top_broad=top_broad, top_k=top_broad)
 
     if args.generator == "llama":
@@ -160,7 +164,7 @@ def main() -> None:
 
         # Retrieve and rerank (get all chunks ranked)
         q_emb = embedder.embed_query(query)
-        broad = store.search(q_emb, top_k=len(store.chunks))
+        broad = store.search(q_emb, top_k=top_broad)
         reranked = reranker.rerank(
             query=query,
             candidates=broad,

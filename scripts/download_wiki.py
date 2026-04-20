@@ -1,31 +1,86 @@
-from datasets import load_dataset
-import pandas as pd
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import itertools
 import os
+from pathlib import Path
 
-os.makedirs("data/raw", exist_ok = True)
+import pandas as pd
+from datasets import load_dataset
 
-# Function To Download A Sample Of Wikipedia Articles Using The Hugging Face Datasets Library And Save It As A Parquet File
-def download_wiki(sample_size=500):
-    print("Downloading Wikipedia dataset...") # Print Message To Double Check That The Function Is Being Called 
-    
-    dataset = load_dataset("wikimedia/wikipedia", "20231101.en", split="train")
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Download a Wikipedia sample without forcing a full local fetch for small test runs."
+    )
+    parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=500,
+        help="How many articles to save.",
+    )
+    parser.add_argument(
+        "--output",
+        default="data/raw/wiki_sample.parquet",
+        help="Output parquet path.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed used when shuffling the streaming dataset.",
+    )
+    parser.add_argument(
+        "--buffer-size",
+        type=int,
+        default=10000,
+        help="Shuffle buffer size for the streaming dataset.",
+    )
+    parser.add_argument(
+        "--config",
+        default="20231101.en",
+        help="Wikipedia config/version to use from Hugging Face datasets.",
+    )
+    return parser.parse_args()
+
+
+
+def download_wiki(sample_size: int, output_path: str, seed: int, buffer_size: int, config: str) -> None:
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+    print("Downloading Wikipedia dataset with streaming...")
+    dataset = load_dataset(
+        "wikimedia/wikipedia",
+        config,
+        split="train",
+        streaming=True,
+    )
+
+    shuffled = dataset.shuffle(seed=seed, buffer_size=max(buffer_size, sample_size))
     rows = []
 
-    for i, item in enumerate(dataset):
-        rows.append({
-            "id": item.get("id"),
-            "title": item.get("title"),
-            "text": item.get("text")
-        })
-
-        if i + 1 >= sample_size:
-            break
+    for item in itertools.islice(shuffled, sample_size):
+        rows.append(
+            {
+                "id": item.get("id"),
+                "title": item.get("title"),
+                "text": item.get("text"),
+            }
+        )
 
     df = pd.DataFrame(rows)
-    df.to_parquet("data/raw/wiki_sample.parquet", index=False)
+    df.to_parquet(output_path, index=False)
 
-    print(f"Downloaded {len(df)} samples from Wikipedia and saved to data/raw/wiki_sample.parquet")
+    print(f"Downloaded {len(df)} samples from Wikipedia and saved to {output_path}")
 
-# Main
+
 if __name__ == "__main__":
-    download_wiki()
+    args = parse_args()
+    download_wiki(
+        sample_size=args.sample_size,
+        output_path=args.output,
+        seed=args.seed,
+        buffer_size=args.buffer_size,
+        config=args.config,
+    )

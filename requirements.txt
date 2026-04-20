@@ -1,42 +1,50 @@
-# ── Data collection pipeline ──────────────────────────────────────────────────
-datasets==2.19.1
-pandas==2.2.2
-pyarrow==16.1.0
-textstat==0.7.3
-
-# ── RAG — embeddings & retrieval ──────────────────────────────────────────────
-sentence-transformers==2.7.0
-# GPU-accelerated FAISS (requires CUDA). Swap to faiss-cpu==1.8.0 for CPU-only:
-faiss-gpu==1.8.0
-numpy==1.26.4
-tqdm==4.66.4
-
-# ── RAG — LLM inference via llama.cpp (GPU) ───────────────────────────────────
-# Install with CUDA 12.x support:
-#   pip install llama-cpp-python \
-#       --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121
-# Or build from source with CUDA:
-#   CMAKE_ARGS="-DLLAMA_CUDA=on" pip install llama-cpp-python
-llama-cpp-python==0.2.77
-
-# ── PyTorch (GPU) ─────────────────────────────────────────────────────────────
-# Install the CUDA-enabled wheel directly:
-#   pip install torch==2.6.0+cu118 --index-url https://download.pytorch.org/whl/cu118
-# 2.6.0 patches CVE: torch.load with weights_only=True RCE (fixed in 2.6.0)
-torch==2.6.0
-
-# ── RAG evaluation ────────────────────────────────────────────────────────────
-rouge-score==0.1.2
-# Optional — only needed if running evaluate_rag.py --with-bertscore:
-# bert-score==0.3.13
-
-# ── Visualization ─────────────────────────────────────────────────────────────
-matplotlib==3.9.0
-seaborn==0.13.2
-
-# ── Fine-tuning / LoRA adapters (optional) ───────────────────────────────────
-# Uncomment when fine-tuning on GPU:
-# transformers==4.41.0
-# peft==0.11.1
-# bitsandbytes==0.43.1
-# accelerate==0.30.0
+aiohappyeyeballs==2.6.1
+aiohttp==3.13.5
+aiosignal==1.4.0
+annotated-doc==0.0.4
+anyio==4.13.0
+attrs==26.1.0
+certifi==2026.2.25
+charset-normalizer==3.4.7
+click==8.3.2
+colorama==0.4.6
+datasets==4.8.4
+dill==0.4.1
+filelock==3.28.0
+frozenlist==1.8.0
+fsspec==2026.2.0
+h11==0.16.0
+hf-xet==1.4.3
+httpcore==1.0.9
+httpx==0.28.1
+huggingface_hub==1.11.0
+idna==3.11
+joblib==1.5.3
+markdown-it-py==4.0.0
+mdurl==0.1.2
+multidict==6.7.1
+multiprocess==0.70.19
+nltk==3.9.4
+numpy==2.4.4
+packaging==26.1
+pandas==3.0.2
+propcache==0.4.1
+pyarrow==23.0.1
+Pygments==2.20.0
+pyphen==0.17.2
+python-dateutil==2.9.0.post0
+PyYAML==6.0.3
+regex==2026.4.4
+requests==2.33.1
+rich==15.0.0
+setuptools==82.0.1
+shellingham==1.5.4
+six==1.17.0
+textstat==0.7.13
+tqdm==4.67.3
+typer==0.24.1
+typing_extensions==4.15.0
+tzdata==2026.1
+urllib3==2.6.3
+xxhash==3.6.0
+yarl==1.23.0
