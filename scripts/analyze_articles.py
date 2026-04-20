@@ -23,58 +23,55 @@ def flesch_kincaid_grade(text: str) -> float:
 
 
 # Function To Analyze Articles And Save Results As JSON Lines
+# Output format matches the RAG pipeline's expected input:
+#   { "id", "title", "text",
+#     "coverage_ratio": {"beginner": float, "intermediate": float, "advanced": float},
+#     "new_words":      {"beginner": [...], "intermediate": [...], "advanced": [...]},
+#     "readability_score": float }
 def analyze_articles():
     print("Running analysis for all levels...")
 
     vocab_paths = {
-        "Beginner": "data/vocab/beginner_1000.txt",
-        "Intermediate": "data/vocab/intermediate_3000.txt",
-        "Advanced": "data/vocab/advanced_6000.txt"
+        "beginner": "data/vocab/beginner_1000.txt",
+        "intermediate": "data/vocab/intermediate_3000.txt",
+        "advanced": "data/vocab/advanced_6000.txt",
     }
 
     df = pd.read_parquet("data/processed/wiki_clean.parquet")
 
     output_path = "outputs/article_stats.jsonl"
 
+    # Pre-load all vocab sets once
+    vocab_sets = {level: load_word_list(path) for level, path in vocab_paths.items()}
+
     with open(output_path, "w", encoding="utf-8") as f:
-        for level, vocab_path in vocab_paths.items():
-            print(f"Processing {level} level...")
+        for _, row in df.iterrows():
+            text = row["clean_text"]
+            tokens = tokenize_words(text)
 
-            known_words = load_word_list(vocab_path)
+            if not tokens:
+                continue
 
-            for _, row in df.iterrows():
-                text = row["clean_text"]
-                tokens = tokenize_words(text)
+            readability = flesch_kincaid_grade(text)
 
-                if not tokens:
-                    continue
+            coverage_ratio = {}
+            new_words = {}
 
-                total_words = len(tokens)
-                unique_words = len(set(tokens))
+            for level, known_words in vocab_sets.items():
                 known_count = sum(1 for w in tokens if w in known_words)
-                coverage_ratio = known_count / total_words
+                coverage_ratio[level] = known_count / len(tokens)
+                new_words[level] = sorted(set(w for w in tokens if w not in known_words))
 
-                article_new_words = sorted(set(w for w in tokens if w not in known_words))
-                new_word_count = len(article_new_words)
+            record = {
+                "id": row["id"],
+                "title": row["title"],
+                "text": text,
+                "coverage_ratio": coverage_ratio,
+                "new_words": new_words,
+                "readability_score": readability,
+            }
 
-                readability = flesch_kincaid_grade(text)
-
-                is_candidate = 0.90 <= coverage_ratio <= 0.97
-
-                record = {
-                    "ID": row["id"],
-                    "Title": row["title"],
-                    "Level": level,
-                    "Total_Words": total_words,
-                    "Unique_Words": unique_words,
-                    "Coverage_Ratio": coverage_ratio,
-                    "New_Word_Count": new_word_count,
-                    "New_Words": ", ".join(article_new_words[:30]),
-                    "Flesch_Kincaid_Grade": readability,
-                    "Candidate": is_candidate
-                }
-
-                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     print(f"Saved JSONL output to {output_path}")
 

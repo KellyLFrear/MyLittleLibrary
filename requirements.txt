@@ -1,0 +1,42 @@
+# ── Data collection pipeline ──────────────────────────────────────────────────
+datasets==2.19.1
+pandas==2.2.2
+pyarrow==16.1.0
+textstat==0.7.3
+
+# ── RAG — embeddings & retrieval ──────────────────────────────────────────────
+sentence-transformers==2.7.0
+# GPU-accelerated FAISS (requires CUDA). Swap to faiss-cpu==1.8.0 for CPU-only:
+faiss-gpu==1.8.0
+numpy==1.26.4
+tqdm==4.66.4
+
+# ── RAG — LLM inference via llama.cpp (GPU) ───────────────────────────────────
+# Install with CUDA 12.x support:
+#   pip install llama-cpp-python \
+#       --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121
+# Or build from source with CUDA:
+#   CMAKE_ARGS="-DLLAMA_CUDA=on" pip install llama-cpp-python
+llama-cpp-python==0.2.77
+
+# ── PyTorch (GPU) ─────────────────────────────────────────────────────────────
+# Install the CUDA-enabled wheel directly:
+#   pip install torch==2.6.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+# 2.6.0 patches CVE: torch.load with weights_only=True RCE (fixed in 2.6.0)
+torch==2.6.0
+
+# ── RAG evaluation ────────────────────────────────────────────────────────────
+rouge-score==0.1.2
+# Optional — only needed if running evaluate_rag.py --with-bertscore:
+# bert-score==0.3.13
+
+# ── Visualization ─────────────────────────────────────────────────────────────
+matplotlib==3.9.0
+seaborn==0.13.2
+
+# ── Fine-tuning / LoRA adapters (optional) ───────────────────────────────────
+# Uncomment when fine-tuning on GPU:
+# transformers==4.41.0
+# peft==0.11.1
+# bitsandbytes==0.43.1
+# accelerate==0.30.0
