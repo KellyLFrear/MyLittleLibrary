@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """
-Quick inspection helper for outputs/article_stats.jsonl.
+check_article_stats.py
 
-Prints:
-- first few rows
-- rows by level
-- candidate rows by level
-- coverage ratio stats
-- readability stats
+Purpose:
+- Read outputs/article_stats.jsonl
+- Print quick summaries so you can judge whether your candidate-selection settings make sense
+- Optionally simulate alternate coverage windows without rerunning analyze_articles.py
 
-Optional:
-- simulate candidate counts for one or more alternate coverage windows
+This is a debugging / inspection helper, not a core pipeline generator.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -21,6 +19,12 @@ from pathlib import Path
 
 
 def parse_args() -> argparse.Namespace:
+    """
+    Read command-line options.
+
+    --preview-rows shows sample records.
+    --window min:max can be repeated to test alternate candidate windows.
+    """
     parser = argparse.ArgumentParser(description="Inspect article_stats.jsonl output.")
     parser.add_argument("--input", default="outputs/article_stats.jsonl", help="Path to article_stats.jsonl")
     parser.add_argument("--preview-rows", type=int, default=3, help="How many rows to preview")
@@ -34,6 +38,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def parse_window(value: str) -> tuple[float, float]:
+    """
+    Parse a coverage window string like "0.45:0.70" into floats.
+
+    Also validates that min <= max.
+    """
     try:
         low_s, high_s = value.split(":", 1)
         low = float(low_s)
@@ -47,6 +56,10 @@ def parse_window(value: str) -> tuple[float, float]:
 
 
 def main() -> None:
+    """
+    Load the JSONL file, summarize it by reading level, and optionally simulate
+    new candidate counts for alternate coverage windows.
+    """
     args = parse_args()
     path = Path(args.input)
     if not path.exists():
@@ -62,12 +75,14 @@ def main() -> None:
     print(f"Input: {path}")
     print(f"Rows loaded: {len(rows)}")
 
+    # Optionally print a few example rows so you can inspect the JSON structure.
     preview_n = max(0, args.preview_rows)
     if preview_n:
         print(f"\nFirst {min(preview_n, len(rows))} rows:")
         for row in rows[:preview_n]:
             print(json.dumps(row, indent=2, ensure_ascii=False))
 
+    # Track counts and stats by level.
     by_level = Counter()
     candidate_by_level = Counter()
     coverage = defaultdict(list)
@@ -76,6 +91,7 @@ def main() -> None:
     for row in rows:
         level = row.get("Level", "UNKNOWN")
         by_level[level] += 1
+
         if row.get("Candidate", False):
             candidate_by_level[level] += 1
 
@@ -105,6 +121,7 @@ def main() -> None:
         arr = readability[level]
         print(f"  {level}: min={min(arr):.2f} max={max(arr):.2f} avg={sum(arr)/len(arr):.2f}")
 
+    # Simulate alternate windows without changing the original JSONL file.
     if args.window:
         print("\nSimulated candidate rows for alternate windows:")
         for raw in args.window:

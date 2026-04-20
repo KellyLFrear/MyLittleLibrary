@@ -1,25 +1,30 @@
 #!/usr/bin/env python3
 """
-Analyze cleaned Wikipedia articles against beginner/intermediate/advanced vocabulary lists.
+analyze_articles.py
 
-Features:
-- configurable parquet input path via --input
-- configurable JSONL output path via --output
-- optional vocab file overrides for each band
-- configurable coverage window for candidate filtering
-- validates required columns before running
+Purpose:
+- Compare each cleaned Wikipedia article against the project vocabulary lists
+- Compute article coverage for Beginner / Intermediate / Advanced
+- Estimate readability with Flesch-Kincaid grade
+- Mark whether an article falls inside a chosen coverage window
+- Write one JSON record per article-level pair to article_stats.jsonl
 
-Default behavior matches the original project layout.
+Important idea:
+Each cleaned article is analyzed three separate times:
+1) once using the beginner vocabulary
+2) once using the intermediate vocabulary
+3) once using the advanced vocabulary
+
+That is why you saw the same number of rows for all three levels.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 from pathlib import Path
-from typing import Dict, Iterable
+from typing import Dict
 
 import pandas as pd
 import textstat
@@ -33,10 +38,16 @@ DEFAULT_VOCABS = {
     "Advanced": "data/vocab/advanced_6000.txt",
 }
 
+# Basic tokenizer pattern:
+# - keeps alphabetic words
+# - allows apostrophes inside words
 WORD_RE = re.compile(r"[a-zA-Z']+")
 
 
 def parse_args() -> argparse.Namespace:
+    """
+    Read command-line arguments for the analysis step.
+    """
     parser = argparse.ArgumentParser(
         description="Analyze cleaned articles against vocabulary lists and write JSONL stats."
     )
@@ -80,26 +91,35 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# Function That Loads a Vocabulary File And Returns A Set Of Lowercase Words
-
 def load_word_list(path: str) -> set[str]:
+    """
+    Load a one-word-per-line vocabulary text file into a lowercase set.
+
+    Using a set makes membership checks fast:
+    `word in known_words`
+    """
     with open(path, "r", encoding="utf-8") as f:
         return {line.strip().lower() for line in f if line.strip()}
 
 
-# Function To Tokenize Text Into Lowercase Words Using Regex
-
 def tokenize_words(text: str) -> list[str]:
+    """
+    Split article text into lowercase word tokens using regex.
+    """
     return WORD_RE.findall(text.lower())
 
 
-# Function To Compute Flesch-Kincaid Grade Level Using textstat
-
 def flesch_kincaid_grade(text: str) -> float:
+    """
+    Compute readability using textstat's Flesch-Kincaid grade level.
+    """
     return textstat.flesch_kincaid_grade(text)
 
 
 def validate_columns(df: pd.DataFrame) -> None:
+    """
+    Make sure the cleaned parquet has the columns required by this script.
+    """
     required = {"title", "clean_text"}
     missing = required - set(df.columns)
     if missing:
@@ -111,6 +131,12 @@ def validate_columns(df: pd.DataFrame) -> None:
 
 
 def ensure_id_column(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Guarantee there is an id column.
+
+    If the source parquet already has `id`, keep it.
+    Otherwise generate a simple sequential id.
+    """
     if "id" in df.columns:
         return df
     df = df.copy()
@@ -119,14 +145,15 @@ def ensure_id_column(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def iter_vocab_paths(args: argparse.Namespace) -> Dict[str, str]:
+    """
+    Package the three vocabulary paths into a single dictionary.
+    """
     return {
         "Beginner": args.beginner_vocab,
         "Intermediate": args.intermediate_vocab,
         "Advanced": args.advanced_vocab,
     }
 
-
-# Function To Analyze Articles And Save Results As JSON Lines
 
 def analyze_articles(
     input_path: str,
@@ -135,6 +162,18 @@ def analyze_articles(
     coverage_min: float,
     coverage_max: float,
 ) -> None:
+    """
+    Analyze each article against each vocabulary list.
+
+    For every (article, level) pair this script computes:
+    - Total_Words: total number of tokens
+    - Unique_Words: number of distinct tokens
+    - Coverage_Ratio: fraction of tokens already in the known-word list
+    - New_Word_Count: number of unique unknown words
+    - New_Words: a preview of up to 30 unknown words
+    - Flesch_Kincaid_Grade: readability estimate
+    - Candidate: whether the coverage ratio falls inside the chosen window
+    """
     if coverage_min > coverage_max:
         raise SystemExit("--coverage-min cannot be greater than --coverage-max")
 
@@ -156,25 +195,36 @@ def analyze_articles(
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     with output_file.open("w", encoding="utf-8") as f:
+        # Loop once per level. This is why all three levels end up with the same
+        # number of rows: every article is evaluated for every level.
         for level, vocab_path in vocab_paths.items():
             print(f"Processing {level} level...")
             known_words = load_word_list(vocab_path)
 
+            # Loop through all cleaned articles.
             for _, row in df.iterrows():
                 text = row["clean_text"]
                 tokens = tokenize_words(text)
 
+                # Skip empty rows after tokenization.
                 if not tokens:
                     continue
 
                 total_words = len(tokens)
                 unique_words = len(set(tokens))
+
+                # Count how many running-word tokens appear in the current known-word list.
                 known_count = sum(1 for w in tokens if w in known_words)
                 coverage_ratio = known_count / total_words
 
+                # Collect unique words that are NOT known for the current level.
                 article_new_words = sorted({w for w in tokens if w not in known_words})
                 new_word_count = len(article_new_words)
+
                 readability = flesch_kincaid_grade(text)
+
+                # Candidate means the article falls inside the target "sweet spot"
+                # for known-word coverage.
                 is_candidate = coverage_min <= coverage_ratio <= coverage_max
 
                 record = {

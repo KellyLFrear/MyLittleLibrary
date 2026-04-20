@@ -1,26 +1,31 @@
 #!/usr/bin/env python3
 """
-Build vocabulary bands from source files.
+build_vocab_lists.py
 
-Design:
-- Exclusive internal add-on bands:
-    * beginner add-on: 1000
-    * intermediate add-on: 2000
-    * advanced add-on: 3000
+Purpose:
+- Read raw vocabulary source files from an input folder
+- Normalize and merge their rows
+- Score each word for Beginner / Intermediate / Advanced suitability
+- Build three exclusive internal bands:
+    * beginner add-on = 1000 words
+    * intermediate add-on = 2000 words
+    * advanced add-on = 3000 words
+- Write cumulative runtime files:
+    * beginner_1000.txt      -> 1000 total words
+    * intermediate_3000.txt  -> 3000 total words
+    * advanced_6000.txt      -> 6000 total words
 
-- Cumulative runtime vocab totals:
-    * beginner_1000.txt      -> 1000 total
-    * intermediate_3000.txt  -> 3000 total (beginner + intermediate add-on)
-    * advanced_6000.txt      -> 6000 total (beginner + intermediate + advanced add-on)
+Big picture:
+This is the script that turns many possible source lists into the final project
+vocabulary lists used by analyze_articles.py.
 
-Supports:
-- flexible grade-hint parsing (K, 1, 2, ..., 12, K-5, 6-8, 9-12, etc.)
-- canonical internal bands:
-    * k-5th grade
-    * 6-8
-    * 9-12
-- richer source metadata columns:
-    word, source_grade_hint, normalized_band, source_list, rank, count, academic, pos, notes
+Key ideas used in scoring:
+- source type / source tag
+- grade hints from input files
+- rank and frequency count if present
+- academic flag if present
+- part of speech hints
+- word shape / suffix heuristics
 """
 from __future__ import annotations
 
@@ -33,14 +38,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
+# Accept only single-word lowercase vocabulary entries, with optional internal
+# apostrophes or hyphens such as "can't" or "well-known".
 WORD_RE = re.compile(r"^[a-z]+(?:['-][a-z]+)*$")
 
-# Runtime known-word list totals requested by the project.
+# Final cumulative vocabulary totals required by the project at runtime.
 RUNTIME_BEGINNER_TOTAL = 1000
 RUNTIME_INTERMEDIATE_TOTAL = 3000
 RUNTIME_ADVANCED_TOTAL = 6000
 
-# Exclusive add-on band sizes used internally.
+# Internal exclusive band sizes. These are the increments added at each stage.
 BEGINNER_ADDON_SIZE = RUNTIME_BEGINNER_TOTAL
 INTERMEDIATE_ADDON_SIZE = RUNTIME_INTERMEDIATE_TOTAL - RUNTIME_BEGINNER_TOTAL  # 2000
 ADVANCED_ADDON_SIZE = RUNTIME_ADVANCED_TOTAL - RUNTIME_INTERMEDIATE_TOTAL      # 3000
@@ -115,6 +122,13 @@ EXPLICIT_GRADE_HINT_ALIASES = {
 
 @dataclass
 class SourceRow:
+    """
+    One row as read from a source file before merging duplicates.
+
+    Example:
+    The same word may appear in multiple CSV/TXT files, possibly with different
+    metadata. Later we merge those rows into one VocabEntry.
+    """
     word: str
     source_file: str
     source_tag: str
@@ -130,6 +144,14 @@ class SourceRow:
 
 @dataclass
 class VocabEntry:
+    """
+    Merged representation of a single vocabulary word across all source files.
+
+    Stores:
+    - where the word came from
+    - collected metadata
+    - scoring information for all three difficulty bands
+    """
     word: str
     source_files: Set[str] = field(default_factory=set)
     source_tags: Set[str] = field(default_factory=set)
@@ -175,6 +197,7 @@ class VocabEntry:
 
 
 def parse_args() -> argparse.Namespace:
+    """Read command-line options for input/output locations and build mode."""
     parser = argparse.ArgumentParser(description="Build banded vocabulary lists from source files.")
     parser.add_argument("--input", required=True, help="Input directory containing CSV/TXT source files.")
     parser.add_argument("--output", required=True, help="Output directory for scored CSV and summary files.")
@@ -198,6 +221,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def normalize_text(value: Optional[str]) -> str:
+    """Lowercase and normalize punctuation/whitespace for general text fields."""
     if value is None:
         return ""
     text = str(value).strip().lower()
@@ -207,6 +231,14 @@ def normalize_text(value: Optional[str]) -> str:
 
 
 def normalize_word(raw: str) -> Optional[str]:
+    """
+    Clean a raw token and return a normalized vocabulary word.
+
+    Rejects:
+    - blanks
+    - multi-word entries
+    - tokens that do not match the allowed word pattern
+    """
     word = normalize_text(raw)
     word = re.sub(r"^[^a-z]+|[^a-z]+$", "", word)
 
@@ -220,6 +252,7 @@ def normalize_word(raw: str) -> Optional[str]:
 
 
 def parse_bool(value: Optional[str]) -> Optional[bool]:
+    """Parse common boolean-like strings such as 1/0, true/false, yes/no."""
     if value is None:
         return None
     s = normalize_text(value)
@@ -231,6 +264,7 @@ def parse_bool(value: Optional[str]) -> Optional[bool]:
 
 
 def parse_int(value: Optional[str]) -> Optional[int]:
+    """Parse an integer field safely, allowing values like "12" or "12.0"."""
     if value is None:
         return None
     s = str(value).strip()
@@ -243,6 +277,7 @@ def parse_int(value: Optional[str]) -> Optional[int]:
 
 
 def _band_for_single_grade(level: int) -> Optional[str]:
+    """Map a single grade number to one of the three project bands."""
     if 0 <= level <= 5:
         return BEGINNER_GRADE_HINT
     if 6 <= level <= 8:
@@ -253,6 +288,7 @@ def _band_for_single_grade(level: int) -> Optional[str]:
 
 
 def parse_grade_hint(value: Optional[str]) -> Optional[str]:
+    
     """
     Accept flexible source labels and normalize them to one of:
     - k-5th grade
@@ -295,6 +331,7 @@ def parse_grade_hint(value: Optional[str]) -> Optional[str]:
 
 
 def infer_source_tag(filename: str) -> str:
+    """Infer the type of source file from its filename so it can influence scoring."""
     name = filename.lower()
 
     if "banned" in name or "exclude" in name:
@@ -330,6 +367,7 @@ def infer_source_tag(filename: str) -> str:
 
 
 def load_banned_words(input_dir: Path) -> Set[str]:
+    """Load words from files whose names imply they are exclusion/banned lists."""
     banned: Set[str] = set()
     for path in input_dir.iterdir():
         if not path.is_file() or infer_source_tag(path.name) != "banned":
@@ -352,6 +390,7 @@ def load_banned_words(input_dir: Path) -> Set[str]:
 
 
 def read_txt_source(path: Path, source_tag: str) -> Iterable[SourceRow]:
+    """Read a plain TXT source file where each non-empty line is a word."""
     source_list = path.stem
     for line in path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
@@ -369,6 +408,7 @@ def read_txt_source(path: Path, source_tag: str) -> Iterable[SourceRow]:
 
 
 def read_csv_source(path: Path, source_tag: str) -> Iterable[SourceRow]:
+    """Read a CSV source file and map each valid row into a SourceRow object."""
     source_list_default = path.stem
     with path.open("r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
@@ -400,6 +440,7 @@ def read_csv_source(path: Path, source_tag: str) -> Iterable[SourceRow]:
 
 
 def load_rows(input_dir: Path) -> List[SourceRow]:
+    """Load all non-banned TXT/CSV source rows from the input directory."""
     rows: List[SourceRow] = []
     for path in sorted(input_dir.iterdir()):
         if not path.is_file():
@@ -418,6 +459,7 @@ def load_rows(input_dir: Path) -> List[SourceRow]:
 
 
 def merge_rows(rows: Iterable[SourceRow], banned: Set[str]) -> Dict[str, VocabEntry]:
+    """Merge duplicate word rows into one VocabEntry while collecting metadata."""
     merged: Dict[str, VocabEntry] = {}
 
     for row in rows:
@@ -460,6 +502,7 @@ def merge_rows(rows: Iterable[SourceRow], banned: Set[str]) -> Dict[str, VocabEn
 
 
 def apply_source_tag_scores(entry: VocabEntry) -> None:
+    """Score a word based on what kind of source file(s) it came from."""
     for tag in entry.source_tags:
         if tag == "beginner_seed":
             entry.beginner_score += 12
@@ -487,6 +530,7 @@ def apply_source_tag_scores(entry: VocabEntry) -> None:
 
 
 def apply_rank_scores(entry: VocabEntry) -> None:
+    """Boost scores using rank metadata when lower rank implies more common words."""
     rank = entry.min_rank
     if rank is None:
         return
@@ -510,6 +554,7 @@ def apply_rank_scores(entry: VocabEntry) -> None:
 
 
 def apply_count_scores(entry: VocabEntry) -> None:
+    """Boost scores using frequency count metadata with a log-scaled bonus."""
     count = entry.max_count
     if count is None or count <= 0:
         return
@@ -521,6 +566,7 @@ def apply_count_scores(entry: VocabEntry) -> None:
 
 
 def apply_grade_hint_scores(entry: VocabEntry) -> None:
+    """Boost the band score suggested by explicit source grade metadata."""
     hint = entry.best_normalized_band()
     if hint == BEGINNER_GRADE_HINT:
         entry.beginner_score += 10
@@ -531,6 +577,7 @@ def apply_grade_hint_scores(entry: VocabEntry) -> None:
 
 
 def apply_academic_scores(entry: VocabEntry) -> None:
+    """Adjust scores using the academic/non-academic flag when available."""
     academic = entry.academic_flag()
     if academic is True:
         entry.advanced_score += 4
@@ -541,6 +588,7 @@ def apply_academic_scores(entry: VocabEntry) -> None:
 
 
 def apply_shape_scores(entry: VocabEntry) -> None:
+    """Use simple heuristics such as word length and suffixes to adjust scores."""
     word = entry.word
     length = len(word)
 
@@ -562,12 +610,14 @@ def apply_shape_scores(entry: VocabEntry) -> None:
 
 
 def apply_pos_scores(entry: VocabEntry) -> None:
+    """Favor beginner scoring for common function-word parts of speech."""
     pos_tags = {p.lower() for p in entry.pos_tags}
     if pos_tags & FUNCTION_WORD_POS:
         entry.beginner_score += 2.0
 
 
 def choose_preferred_band(entry: VocabEntry) -> str:
+    """Choose the final best-fit band, preferring explicit hints when present."""
     hint = entry.best_normalized_band()
     if hint == BEGINNER_GRADE_HINT:
         return "beginner"
@@ -585,6 +635,7 @@ def choose_preferred_band(entry: VocabEntry) -> str:
 
 
 def score_entries(entries: Dict[str, VocabEntry]) -> None:
+    """Run all scoring rules for every merged vocabulary entry."""
     for entry in entries.values():
         apply_source_tag_scores(entry)
         apply_rank_scores(entry)
@@ -597,6 +648,7 @@ def score_entries(entries: Dict[str, VocabEntry]) -> None:
 
 
 def sort_for_band(entries: Iterable[VocabEntry], band: str) -> List[VocabEntry]:
+    """Sort words for a target band using score, rank, source count, then alphabetically."""
     def key_fn(entry: VocabEntry) -> Tuple[float, int, int, str]:
         score = {
             "beginner": entry.beginner_score,
@@ -611,10 +663,12 @@ def sort_for_band(entries: Iterable[VocabEntry], band: str) -> List[VocabEntry]:
 
 
 def take_band(entries: Iterable[VocabEntry], band: str, size: int) -> List[VocabEntry]:
+    """Take the top N words for a given band after sorting."""
     return sort_for_band(entries, band)[:size]
 
 
 def build_exclusive_bands(all_entries_sorted: List[VocabEntry]) -> Dict[str, List[VocabEntry]]:
+    """Build non-overlapping beginner, intermediate, and advanced add-on bands."""
     remaining = {entry.word: entry for entry in all_entries_sorted}
 
     beginner = take_band(remaining.values(), "beginner", BEGINNER_ADDON_SIZE)
@@ -635,6 +689,7 @@ def build_exclusive_bands(all_entries_sorted: List[VocabEntry]) -> Dict[str, Lis
 
 
 def validate_needed(selection: Dict[str, List[VocabEntry]], requested_band: str, allow_shortfall: bool) -> None:
+    """Ensure enough words were found to satisfy the requested target sizes."""
     requirements = {
         "beginner": {"beginner": BEGINNER_ADDON_SIZE},
         "intermediate": {"beginner": BEGINNER_ADDON_SIZE, "intermediate": INTERMEDIATE_ADDON_SIZE},
@@ -659,6 +714,7 @@ def validate_needed(selection: Dict[str, List[VocabEntry]], requested_band: str,
 
 
 def cumulative_runtime_rows(selection: Dict[str, List[VocabEntry]], band: str) -> List[VocabEntry]:
+    """Return the cumulative runtime list for a band, including lower bands below it."""
     if band == "beginner":
         return list(selection["beginner"])
     if band == "intermediate":
@@ -669,6 +725,7 @@ def cumulative_runtime_rows(selection: Dict[str, List[VocabEntry]], band: str) -
 
 
 def entry_to_row(entry: VocabEntry, band: Optional[str] = None) -> Dict[str, str]:
+    """Convert a VocabEntry into a CSV-friendly dictionary row."""
     return {
         "word": entry.word,
         "source_grade_hint": entry.source_grade_hint_text(),
@@ -690,6 +747,7 @@ def entry_to_row(entry: VocabEntry, band: Optional[str] = None) -> Dict[str, str
 
 
 def write_csv(path: Path, rows: List[VocabEntry], band: str) -> None:
+    """Write one exclusive band to a CSV file with metadata and scores."""
     fieldnames = [
         "word",
         "source_grade_hint",
@@ -716,6 +774,7 @@ def write_csv(path: Path, rows: List[VocabEntry], band: str) -> None:
 
 
 def write_master_csv(path: Path, rows: List[VocabEntry]) -> None:
+    """Write a CSV containing every merged/scored vocabulary entry."""
     fieldnames = [
         "word",
         "source_grade_hint",
@@ -743,6 +802,7 @@ def write_master_csv(path: Path, rows: List[VocabEntry]) -> None:
 
 
 def write_txt(path: Path, rows: List[VocabEntry]) -> None:
+    """Write a simple one-word-per-line TXT file for runtime use."""
     unique_words = sorted({entry.word for entry in rows})
     with path.open("w", encoding="utf-8") as f:
         for word in unique_words:
@@ -750,6 +810,7 @@ def write_txt(path: Path, rows: List[VocabEntry]) -> None:
 
 
 def write_runtime_file(runtime_dir: Path, band: str, rows: List[VocabEntry]) -> str:
+    """Write the final runtime TXT file for one cumulative band and return its path."""
     runtime_dir.mkdir(parents=True, exist_ok=True)
     name_map = {
         "beginner": "beginner_1000.txt",
@@ -762,6 +823,7 @@ def write_runtime_file(runtime_dir: Path, band: str, rows: List[VocabEntry]) -> 
 
 
 def main() -> None:
+    """Run the full vocabulary-build pipeline from source files to output artifacts."""
     args = parse_args()
     input_dir = Path(args.input)
     output_dir = Path(args.output)
@@ -773,11 +835,15 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     runtime_dir.mkdir(parents=True, exist_ok=True)
 
+    # Load exclusions, read all usable source rows, merge duplicates,
+    # then compute Beginner/Intermediate/Advanced scores for each word.
     banned = load_banned_words(input_dir)
     rows = load_rows(input_dir)
     merged = merge_rows(rows, banned)
     score_entries(merged)
 
+    # Build exclusive add-on bands. A word chosen for beginner is removed
+    # before intermediate selection, and so on.
     all_entries_sorted = sorted(merged.values(), key=lambda entry: entry.word)
     exclusive = build_exclusive_bands(all_entries_sorted)
 
@@ -820,6 +886,7 @@ def main() -> None:
         runtime_counts[band] = len({entry.word for entry in runtime_rows})
         output_files[f"{band}_txt"] = write_runtime_file(runtime_dir, band, runtime_rows)
 
+    # Record a machine-readable summary so you can verify counts and output paths.
     summary = {
         "input_dir": str(input_dir),
         "output_dir": str(output_dir),

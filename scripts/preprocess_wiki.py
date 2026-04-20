@@ -1,8 +1,22 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+preprocess_wiki.py
+
+Purpose:
+- Load the raw Wikipedia parquet file created by download_wiki.py
+- Normalize text formatting
+- Remove disambiguation pages
+- Remove very short stub articles
+- Save a cleaner parquet file for downstream analysis
+
+Why this matters:
+The raw sample may contain pages that are not useful for reading-level work,
+such as "(disambiguation)" pages or very short articles with too little text.
+"""
+
 import argparse
-import os
 import re
 import unicodedata
 from pathlib import Path
@@ -11,6 +25,9 @@ import pandas as pd
 
 
 def parse_args() -> argparse.Namespace:
+    """
+    Read command-line options for preprocessing.
+    """
     parser = argparse.ArgumentParser(
         description=(
             "Preprocess Wikipedia parquet by normalizing text, removing "
@@ -36,9 +53,16 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# Function To Clean Text By Normalizing Unicode, Removing Extra Whitespace, And Stripping Leading/Trailing Spaces
-
 def clean_text(text: str) -> str:
+    """
+    Normalize article text.
+
+    What it does:
+    - Returns an empty string if the value is not text
+    - Normalizes Unicode so characters are represented consistently
+    - Collapses repeated whitespace into single spaces
+    - Trims leading/trailing spaces
+    """
     if not isinstance(text, str):
         return ""
 
@@ -47,23 +71,41 @@ def clean_text(text: str) -> str:
     return text
 
 
-# Function To Identify Disambiguation Pages Based On Title And Text Content
-
 def is_disambiguation(title: str, text: str) -> bool:
+    """
+    Identify common Wikipedia disambiguation pages.
+
+    Heuristic used here:
+    - title contains "(disambiguation)"
+    - text contains the phrase "may refer to:"
+    """
     t = (title or "").lower()
     x = (text or "").lower()
     return "(disambiguation)" in t or "may refer to:" in x
 
 
-# Function To Identify Stub Articles Based On Word Count (Simple Heuristic)
-
 def is_stub(text: str, min_words: int = 150) -> bool:
+    """
+    Treat very short articles as stubs.
+
+    A stub here simply means the cleaned article has fewer than min_words.
+    """
     return len((text or "").split()) < min_words
 
 
-# Main Function To Preprocess Wikipedia Data By Cleaning Text, Removing Disambiguation Pages And Stubs, And Saving The Cleaned Data
-
 def preprocess_wiki(input_path: str, output_path: str, min_words: int = 150) -> None:
+    """
+    Run the full preprocessing step.
+
+    Steps:
+    1. Check that the input parquet exists.
+    2. Load the parquet into a DataFrame.
+    3. Verify required columns exist.
+    4. Create a cleaned version of the text.
+    5. Remove disambiguation pages and short stubs.
+    6. Add a word_count column.
+    7. Save the result to a new parquet file.
+    """
     print("Running Preprocessing...")
 
     in_path = Path(input_path)
@@ -82,13 +124,16 @@ def preprocess_wiki(input_path: str, output_path: str, min_words: int = 150) -> 
         missing_text = ", ".join(sorted(missing_columns))
         raise ValueError(f"Input parquet is missing required columns: {missing_text}")
 
+    # Create a cleaned text column that later scripts will use.
     df["clean_text"] = df["text"].apply(clean_text)
 
+    # Keep only rows that are not disambiguation pages and not too short.
     df = df[
         (~df.apply(lambda row: is_disambiguation(row["title"], row["clean_text"]), axis=1))
         & (~df["clean_text"].apply(lambda x: is_stub(x, min_words=min_words)))
     ].copy()
 
+    # Store a simple word count for convenience/debugging.
     df["word_count"] = df["clean_text"].apply(lambda x: len(x.split()))
 
     df.to_parquet(out_path, index=False)
