@@ -1,0 +1,50 @@
+[
+  {
+    "query": "space exploration and black holes",
+    "relevant_ids": ["wiki_009"],
+    "level": "intermediate",
+    "note": "Black Holes is the only space/astronomy article"
+  },
+  {
+    "query": "history of ancient civilizations and empires",
+    "relevant_ids": ["wiki_002", "wiki_005", "wiki_010"],
+    "level": "intermediate",
+    "note": "Roman Empire, French Revolution, Renaissance"
+  },
+  {
+    "query": "machine learning and artificial intelligence",
+    "relevant_ids": ["wiki_003"],
+    "level": "intermediate",
+    "note": "Introduction to Machine Learning"
+  },
+  {
+    "query": "environmental science climate and nature",
+    "relevant_ids": ["wiki_007", "wiki_004"],
+    "level": "intermediate",
+    "note": "Climate Change, Amazon Rainforest"
+  },
+  {
+    "query": "genetics biology and living cells",
+    "relevant_ids": ["wiki_001", "wiki_006"],
+    "level": "intermediate",
+    "note": "Photosynthesis, DNA and Genetics"
+  },
+  {
+    "query": "technology internet and computer networks",
+    "relevant_ids": ["wiki_008"],
+    "level": "intermediate",
+    "note": "The Internet"
+  },
+  {
+    "query": "European history art and culture",
+    "relevant_ids": ["wiki_005", "wiki_010"],
+    "level": "beginner",
+    "note": "French Revolution, Renaissance"
+  },
+  {
+    "query": "tropical forests biodiversity and climate",
+    "relevant_ids": ["wiki_004", "wiki_007"],
+    "level": "beginner",
+    "note": "Amazon Rainforest, Climate Change"
+  }
+]
