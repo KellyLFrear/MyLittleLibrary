@@ -93,7 +93,7 @@ def is_stub(text: str, min_words: int = 150) -> bool:
     return len((text or "").split()) < min_words
 
 
-def preprocess_wiki(input_path: str, output_path: str, min_words: int = 150) -> None:
+def preprocess_wiki(input_path: str = "data/raw/wiki_sample.parquet", output_path: str = "data/processed/wiki_clean.parquet", min_words: int = 150) -> None:
     """
     Run the full preprocessing step.
 

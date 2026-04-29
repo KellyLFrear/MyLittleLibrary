@@ -46,7 +46,13 @@ def parse_args() -> argparse.Namespace:
 
 
 
-def download_wiki(sample_size: int, output_path: str, seed: int, buffer_size: int, config: str) -> None:
+def download_wiki(
+    sample_size: int = 500,
+    output_path: str = "data/raw/wiki_sample.parquet",
+    seed: int = 42,
+    buffer_size: int = 10000,
+    config: str = "20231101.en",
+) -> None:
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     print("Downloading Wikipedia dataset with streaming...")

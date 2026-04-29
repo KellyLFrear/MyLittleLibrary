@@ -1,6 +1,7 @@
 ## Step 1: Download Wikipedia Articles, Process The Text To Clean It And Remove Unwanted Articles, And Load Vocabulary Lists For Different Proficiency Levels 
 from scripts.download_wiki import download_wiki
 from scripts.preprocess_wiki import preprocess_wiki
+from scripts.tokenize_articles import tokenize_articles
 from scripts.analyze_articles import analyze_articles
 
 # Download Wikipedia Articles
@@ -8,6 +9,9 @@ download_wiki()
 
 # Clean and Process The Wikipedia Articles
 preprocess_wiki()
+
+# Tokenize cleaned articles with an LLM-compatible tokenizer
+tokenize_articles()
 
 # Analyze The Cleaned Articles With Different Vocabulary Lists
 # Outputs outputs/article_stats.jsonl in the format expected by the RAG pipeline

@@ -11,15 +11,15 @@ Saves full results to data/eval_results.json.
 
 Usage
 -----
-    python scripts/evaluate_rag.py                         # template generator, no cross-encoder
-    python scripts/evaluate_rag.py --generator llama       # llama.cpp GPU
-        --model-path models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+    CUDA_VISIBLE_DEVICES=0,2 python scripts/evaluate_rag.py # llama.cpp GPU (default)
+        --filename models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
     python scripts/evaluate_rag.py --with-bertscore        # slow but complete
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.embeddings.embedder import ArticleEmbedder
 from src.embeddings.vector_store import FAISSVectorStore
-from src.rag.pipeline import LlamaCppGenerator, RAGPipeline, TemplateGenerator
+from src.rag.pipeline import LlamaCppGenerator, RAGPipeline
 from src.rag.reranker import VocabAwareReranker
 from src.rag.retriever import TwoStageRetriever
 
@@ -97,47 +97,52 @@ def main() -> None:
     p.add_argument("--index-dir",       default="data/faiss_index")
     p.add_argument("--queries",         default="data/eval_queries.json")
     p.add_argument("--output",          default="data/eval_results.json")
-    p.add_argument("--device",          default="cuda",
-                   help="Torch device: 'cuda' (default) or 'cpu'")
-    p.add_argument("--generator",       choices=["template", "llama"], default="template")
-    p.add_argument("--model-path",      default="models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
-                   help="Path to GGUF model file (used when --generator llama)")
+    p.add_argument("--repo-id",         default="bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+                   help="Hugging Face repo ID for the GGUF model")
+    p.add_argument("--filename",        default="Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+                   help="GGUF filename within the repository")
     p.add_argument("--n-gpu-layers",    type=int, default=-1)
-    p.add_argument("--top-broad",       type=int, default=200,
+    p.add_argument("--context-length",  type=int, default=4096,
+                   help="LLM context window size in tokens (default: 4096)")
+    p.add_argument("--top-broad",       type=int, default=100,
                    help="Number of candidates for reranking before final ranking")
     p.add_argument("--no-cross-encoder", action="store_true",
                    help="Disable cross-encoder reranker (uses bi-encoder scores only; faster)")
-    p.add_argument("--no-gpu-index",    action="store_true")
     p.add_argument("--with-bertscore",  action="store_true",
                    help="Also compute BERTScore (slow, requires bert-score package)")
+    p.add_argument("--tensor-split", type=float, nargs="+", default=None,
+               help="Fraction of model layers per GPU, e.g. --tensor-split 0.5 0.5")
+    p.add_argument("--cuda-visible-devices", default=None,
+                   help="Optional GPU visibility override, e.g. '0,2'")
     p.add_argument("--coverage-low",    type=float, default=0.85)
     p.add_argument("--coverage-high",   type=float, default=0.97)
     args = p.parse_args()
+
+    if args.cuda_visible_devices:
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_visible_devices
 
     coverage_window = (args.coverage_low, args.coverage_high)
     ks = [5, 10, 20]
 
     # -- Load system ----------------------------------------------------------
-    use_gpu_index = not args.no_gpu_index
-    store     = FAISSVectorStore.load(args.index_dir, use_gpu=use_gpu_index)
-    embedder  = ArticleEmbedder(device=args.device)
+    store     = FAISSVectorStore.load(args.index_dir)
+    embedder  = ArticleEmbedder(device="cuda")
     reranker  = VocabAwareReranker(
         use_cross_encoder=not args.no_cross_encoder,
-        device=args.device,
+        device="cuda",
     )
     # FAISS GPU indexes support top-k up to 2048 per query.
     # Keep broad retrieval within that bound and avoid oversized cross-encoder batches.
-    gpu_k_limit = 2048 if use_gpu_index else len(store.chunks)
-    top_broad = min(len(store.chunks), gpu_k_limit, max(1, args.top_broad))
+    top_broad = min(len(store.chunks), 2048, max(1, args.top_broad))
     retriever = TwoStageRetriever(store, embedder, reranker, top_broad=top_broad, top_k=top_broad)
 
-    if args.generator == "llama":
-        generator = LlamaCppGenerator(
-            model_path=args.model_path,
-            n_gpu_layers=args.n_gpu_layers,
-        )
-    else:
-        generator = TemplateGenerator()
+    generator = LlamaCppGenerator(
+        repo_id=args.repo_id,
+        filename=args.filename,
+        n_gpu_layers=args.n_gpu_layers,
+        tensor_split=args.tensor_split,
+        context_length=args.context_length,
+    )
 
     pipeline = RAGPipeline(retriever, generator, coverage_window=coverage_window)
 

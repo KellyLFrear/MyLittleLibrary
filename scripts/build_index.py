@@ -1,11 +1,19 @@
 """
-Build the FAISS index from the article_stats.jsonl produced by analyze_articles.
+Build a FAISS index from article JSONL data.
 
-Input format — JSON lines (one article per line), as written by analyze_articles.py:
+Supported input schemas
+-----------------------
+1) Compact article rows (one row per article):
     {"id": "...", "title": "...", "text": "...",
      "coverage_ratio": {"beginner": 0.72, "intermediate": 0.91, "advanced": 0.97},
      "new_words":      {"beginner": [...], "intermediate": [...], "advanced": [...]},
      "readability_score": 58.3}
+
+2) analyze_articles rows (one row per article-level pair):
+    {"ID": "...", "Title": "...", "Text": "...", "Level": "Beginner",
+     "Coverage_Ratio": 0.72, "New_Words": "word1, word2", ...}
+
+Rows in schema (2) are normalized into one article object per ID before chunking.
 
 Usage
 -----
@@ -23,6 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import OrderedDict
 from pathlib import Path
 
 # Allow running from the project root without installing the package
@@ -31,6 +40,61 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.embeddings.chunker import chunk_article
 from src.embeddings.embedder import ArticleEmbedder
 from src.embeddings.vector_store import FAISSVectorStore
+
+
+def _parse_new_words(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(v).strip() for v in value if str(v).strip()]
+    if isinstance(value, str):
+        return [w.strip() for w in value.split(",") if w.strip()]
+    return []
+
+
+def normalize_articles(raw_rows: list[dict]) -> list[dict]:
+    """Normalize supported JSONL layouts into the chunker's expected article schema."""
+    if not raw_rows:
+        return []
+
+    # Already in expected schema.
+    if "text" in raw_rows[0] and "id" in raw_rows[0]:
+        return raw_rows
+
+    # Current analyze_articles layout: one row per (article, level) with uppercase keys.
+    if "ID" in raw_rows[0] and "Level" in raw_rows[0]:
+        merged: "OrderedDict[str, dict]" = OrderedDict()
+        for row in raw_rows:
+            aid = str(row.get("ID", "")).strip()
+            if not aid:
+                continue
+
+            article = merged.setdefault(
+                aid,
+                {
+                    "id": aid,
+                    "title": str(row.get("Title", "")),
+                    "text": str(row.get("Text", "") or ""),
+                    "coverage_ratio": {},
+                    "new_words": {},
+                    "readability_score": float(row.get("Flesch_Kincaid_Grade", 0.0) or 0.0),
+                },
+            )
+
+            if not article["text"] and row.get("Text"):
+                article["text"] = str(row["Text"])
+
+            level = str(row.get("Level", "")).strip().lower()
+            if level:
+                cov = row.get("Coverage_Ratio")
+                if isinstance(cov, (int, float)):
+                    article["coverage_ratio"][level] = float(cov)
+                article["new_words"][level] = _parse_new_words(row.get("New_Words"))
+
+        return list(merged.values())
+
+    raise SystemExit(
+        "[build_index] Unsupported article JSONL schema. Expected either compact article rows "
+        "with id/title/text or analyze_articles rows with ID/Title/Level/Text."
+    )
 
 
 def main() -> None:
@@ -58,8 +122,15 @@ def main() -> None:
     if not path.exists():
         sys.exit(f"[build_index] Article file not found: {path}")
 
-    articles = [json.loads(line) for line in path.open() if line.strip()]
-    print(f"[build_index] Loaded {len(articles):,} articles from {path}")
+    raw_rows = [json.loads(line) for line in path.open() if line.strip()]
+    articles = normalize_articles(raw_rows)
+    missing_text = sum(1 for a in articles if not str(a.get("text", "")).strip())
+    print(
+        f"[build_index] Loaded {len(raw_rows):,} row(s) and normalized to "
+        f"{len(articles):,} article(s) from {path}"
+    )
+    if missing_text:
+        print(f"[build_index] Warning: {missing_text:,} article(s) have empty text and will be skipped")
 
     # ── Chunk ─────────────────────────────────────────────────────────────────
     all_chunks = []

@@ -66,7 +66,7 @@ class VocabAwareReranker:
 
     def rerank(
         self,
-        query: str,
+        query: Optional[str],
         candidates: List[Tuple[ArticleChunk, float]],
         vocab_level: str,
         coverage_window: Tuple[float, float] = (0.85, 0.97),
@@ -77,13 +77,23 @@ class VocabAwareReranker:
 
         chunks, bi_scores = zip(*candidates)
 
-        if self.use_cross_encoder and self._cross_encoder is not None:
+        # Profile-driven mode (query=None): skip semantic scoring entirely and
+        # weight ranking purely by vocabulary-coverage score.
+        if query is None:
+            effective_semantic_weight = 0.0
+            effective_vocab_weight = 1.0
+            semantic_scores = [0.0] * len(chunks)
+        elif self.use_cross_encoder and self._cross_encoder is not None:
+            effective_semantic_weight = self.semantic_weight
+            effective_vocab_weight = self.vocab_weight
             pairs = [(query, c.text[:512]) for c in chunks]
             raw = self._cross_encoder.predict(pairs, show_progress_bar=False)
             lo, hi = raw.min(), raw.max()
             semantic_scores = (raw - lo) / (hi - lo + 1e-8)
         else:
             # Fallback: normalize bi-encoder cosine scores as the semantic component
+            effective_semantic_weight = self.semantic_weight
+            effective_vocab_weight = self.vocab_weight
             bi = np.array(bi_scores, dtype=np.float32)
             lo, hi = bi.min(), bi.max()
             semantic_scores = (bi - lo) / (hi - lo + 1e-8)
@@ -99,7 +109,7 @@ class VocabAwareReranker:
             if cov < 0:
                 score = cov   # demoted below all in-window results
             else:
-                score = self.semantic_weight * float(sem) + self.vocab_weight * cov
+                score = effective_semantic_weight * float(sem) + effective_vocab_weight * cov
             results.append((chunk, score))
 
         results.sort(key=lambda x: x[1], reverse=True)

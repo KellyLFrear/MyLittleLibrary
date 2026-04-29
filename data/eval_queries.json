@@ -1,50 +1,50 @@
 [
   {
-    "query": "space exploration and black holes",
-    "relevant_ids": ["wiki_009"],
+    "query": "football and soccer clubs and league seasons",
+    "relevant_ids": ["64539083", "64547658", "64523987", "64596339", "64516774"],
     "level": "intermediate",
-    "note": "Black Holes is the only space/astronomy article"
+    "note": "2020-21 Stoke City season, 2020 Toppserien, Aurora FC Canada, Coupe de France, North Mississauga SC"
   },
   {
-    "query": "history of ancient civilizations and empires",
-    "relevant_ids": ["wiki_002", "wiki_005", "wiki_010"],
-    "level": "intermediate",
-    "note": "Roman Empire, French Revolution, Renaissance"
+    "query": "spider and insect species taxonomy",
+    "relevant_ids": ["64519771", "64539539", "64587778", "64623945", "64595252"],
+    "level": "advanced",
+    "note": "Pycnothelidae species list, Anochetus ghilianii ant, Entypesa andohahela spider, Nemesioidina clade, mollusks of Utah"
   },
   {
-    "query": "machine learning and artificial intelligence",
-    "relevant_ids": ["wiki_003"],
-    "level": "intermediate",
-    "note": "Introduction to Machine Learning"
-  },
-  {
-    "query": "environmental science climate and nature",
-    "relevant_ids": ["wiki_007", "wiki_004"],
-    "level": "intermediate",
-    "note": "Climate Change, Amazon Rainforest"
-  },
-  {
-    "query": "genetics biology and living cells",
-    "relevant_ids": ["wiki_001", "wiki_006"],
-    "level": "intermediate",
-    "note": "Photosynthesis, DNA and Genetics"
-  },
-  {
-    "query": "technology internet and computer networks",
-    "relevant_ids": ["wiki_008"],
-    "level": "intermediate",
-    "note": "The Internet"
-  },
-  {
-    "query": "European history art and culture",
-    "relevant_ids": ["wiki_005", "wiki_010"],
+    "query": "pop music singles and song releases",
+    "relevant_ids": ["64506319", "64565681", "64596203", "64598873", "64558575"],
     "level": "beginner",
-    "note": "French Revolution, Renaissance"
+    "note": "Be Like That, Paralyzed (Delta Goodrem), Hello (Pop Smoke), Nobody's Love (Maroon 5), Puppet Man"
   },
   {
-    "query": "tropical forests biodiversity and climate",
-    "relevant_ids": ["wiki_004", "wiki_007"],
+    "query": "painters and visual art history",
+    "relevant_ids": ["64514778", "64535650", "64512178", "64597748"],
+    "level": "intermediate",
+    "note": "Luce Turnier (Haitian painter), Louis Abel-Truchet (French painter), Queer art, Bridget R. Cooks (art historian)"
+  },
+  {
+    "query": "court cases and criminal law",
+    "relevant_ids": ["64515138", "64551983"],
+    "level": "intermediate",
+    "note": "Facebook v. Duguid (Supreme Court TCPA case), Murder in Texas law"
+  },
+  {
+    "query": "historical monuments castles and archaeological sites",
+    "relevant_ids": ["64545228", "64559074", "64541022", "64590464", "64614494"],
     "level": "beginner",
-    "note": "Amazon Rainforest, Climate Change"
+    "note": "Monument to Columbus Valladolid, Ashalim site, Forte Braschi Rome, Paghman Hill Castle, Monument to Onésimo Redondo"
+  },
+  {
+    "query": "political parties elections and campaigns",
+    "relevant_ids": ["64542872", "64620983", "64506904"],
+    "level": "intermediate",
+    "note": "2020 New Mexico Senate election, Tennessee 26th Senate district, Action for the Republic Catalonia"
+  },
+  {
+    "query": "natural disasters and emergency management",
+    "relevant_ids": ["64630044", "64536154"],
+    "level": "beginner",
+    "note": "Hurricane Hanna 2020, Resilience NSW disaster agency"
   }
 ]

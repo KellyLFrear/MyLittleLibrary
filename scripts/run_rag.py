@@ -3,28 +3,36 @@ Query the RAG pipeline and display article recommendations.
 
 Usage
 -----
-Template generator (no model needed, useful for testing retrieval):
-    python scripts/run_rag.py --query "space exploration and black holes" --level intermediate --generator template
+Topic query mode (original):
+    CUDA_VISIBLE_DEVICES=0,2 python scripts/run_rag.py \\
+        --query "history of ancient civilizations" --level beginner \\
+        --repo-id bartowski/Meta-Llama-3.1-8B-Instruct-GGUF \\
+        --filename Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf \\
+        --tensor-split 0.5 0.5
 
-LLaMA GGUF model via llama.cpp (GPU):
-    python scripts/run_rag.py --query "history of ancient civilizations" --level beginner \
-        --model-path models/llama-3.1-8b-instruct.Q4_K_M.gguf
+Profile-driven mode (load user from DB — no query required):
+    python scripts/run_rag.py --user-id 42 --db-path data/library.db
+
+    The script reads the user's current reading level and known-word list from
+    the database and recommends articles purely based on vocabulary coverage,
+    without needing a topic query.
 
 Vocabulary growth simulation:
-    python scripts/run_rag.py --query "space and physics" --level intermediate \
-        --simulate-growth --generator template
+    python scripts/run_rag.py --query "space and physics" --level intermediate --simulate-growth
 """
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.embeddings.embedder import ArticleEmbedder
 from src.embeddings.vector_store import FAISSVectorStore
-from src.rag.pipeline import LlamaCppGenerator, RAGOutput, RAGPipeline, TemplateGenerator
+from src.rag.pipeline import LlamaCppGenerator, RAGOutput, RAGPipeline
 from src.rag.reranker import VocabAwareReranker
 from src.rag.retriever import TwoStageRetriever
 from src.rag.student_profile import StudentProfile
@@ -46,42 +54,104 @@ def print_result(i: int, r: RAGOutput) -> None:
     print(f"    Chunks    : {', '.join(r.source_chunk_ids)}")
 
 
+def _load_profile_from_db(user_id: int, db_path: str) -> StudentProfile:
+    """Load a StudentProfile from the database for the given user_id."""
+    from src.db.connection import get_db
+    with get_db(db_path) as conn:
+        return StudentProfile.from_db(user_id, conn)
+
+
 def main() -> None:
-    p = argparse.ArgumentParser(description="Query the vocabulary-aware RAG pipeline.")
-    p.add_argument("--index-dir",       default="data/faiss_index")
-    p.add_argument("--query",           required=True, help="Student topic of interest")
+    p = argparse.ArgumentParser(
+        description="Query the vocabulary-aware RAG pipeline.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p.add_argument("--index-dir",   default="data/faiss_index")
+
+    # ── Input mode: topic query OR user profile ──────────────────────────────
+    input_group = p.add_mutually_exclusive_group()
+    input_group.add_argument(
+        "--query",
+        default=None,
+        help="Student topic of interest (topic-query mode).",
+    )
+    input_group.add_argument(
+        "--user-id",
+        type=int,
+        default=None,
+        metavar="USER_ID",
+        help=(
+            "Load the student's reading level and known-word list from the DB "
+            "and recommend articles by vocabulary coverage (profile-driven mode)."
+        ),
+    )
+
+    p.add_argument(
+        "--db-path",
+        default="data/library.db",
+        help="Path to the SQLite database (used with --user-id). Default: data/library.db",
+    )
     p.add_argument("--level",           choices=["beginner", "intermediate", "advanced"],
-                   default="intermediate")
+                   default="intermediate",
+                   help="Vocabulary level — ignored when --user-id is given.")
     p.add_argument("--top-k",           type=int, default=3)
-    p.add_argument("--top-broad",       type=int, default=50)
-    p.add_argument("--device",          default="cuda",
-                   help="Torch device for embedder/reranker: 'cuda' (default) or 'cpu'")
-    p.add_argument("--generator",       choices=["llama", "template"], default="llama")
-    p.add_argument("--model-path",      default="models/llama-3.1-8b-instruct.Q4_K_M.gguf",
-                   help="Path to GGUF model file (used when --generator llama)")
+    p.add_argument("--top-broad",       type=int, default=25)
+    p.add_argument("--repo-id",         default="bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+                   help="Hugging Face repo ID for the GGUF model")
+    p.add_argument("--filename",        default="Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+                   help="GGUF filename within the repository")
+    p.add_argument("--tensor-split", type=float, nargs="+", default=None,
+               help="Fraction of model layers per GPU, e.g. --tensor-split 0.5 0.5")
+    p.add_argument("--cuda-visible-devices", default=None,
+                   help="Optional GPU visibility override, e.g. '0,2'")
     p.add_argument("--n-gpu-layers",    type=int, default=-1,
                    help="GPU layers to offload in llama.cpp (-1 = all)")
+    p.add_argument("--context-length",  type=int, default=4096,
+                   help="LLM context window size in tokens (default: 4096)")
     p.add_argument("--no-cross-encoder", action="store_true",
                    help="Disable cross-encoder reranker (uses bi-encoder scores only)")
-    p.add_argument("--no-gpu-index",    action="store_true",
-                   help="Disable GPU acceleration for the FAISS index")
     p.add_argument("--simulate-growth", action="store_true",
                    help="Mark top result as read and re-query to show vocab growth effect")
     args = p.parse_args()
 
-    # -- Load index ------------------------------------------------------------
+    # Require at least one of --query or --user-id
+    if args.query is None and args.user_id is None:
+        p.error("Provide either --query <topic> or --user-id <id>.")
+
+    if args.cuda_visible_devices:
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_visible_devices
+
+    # -- Resolve input mode ---------------------------------------------------
+    query: Optional[str]
+    if args.user_id is not None:
+        db_path = Path(args.db_path)
+        if not db_path.exists():
+            sys.exit(
+                f"[run_rag] Database not found at '{db_path}'.\n"
+                f"          Run init_db() first or check --db-path."
+            )
+        profile = _load_profile_from_db(args.user_id, str(db_path))
+        query = args.query  # May still be provided alongside --user-id for topic filtering
+        level = profile.base_level
+        mode_label = f"profile-driven (user_id={args.user_id})"
+    else:
+        profile = StudentProfile(base_level=args.level)
+        query = args.query
+        level = args.level
+        mode_label = "topic-query"
+
+    # -- Load index -----------------------------------------------------------
     if not Path(args.index_dir).exists():
         sys.exit(
             f"[run_rag] Index not found at '{args.index_dir}'.\n"
             f"          Run: python scripts/build_index.py"
         )
 
-    use_gpu_index = not args.no_gpu_index
-    store     = FAISSVectorStore.load(args.index_dir, use_gpu=use_gpu_index)
-    embedder  = ArticleEmbedder(device=args.device)
+    store     = FAISSVectorStore.load(args.index_dir)
+    embedder  = ArticleEmbedder(device="cuda")
     reranker  = VocabAwareReranker(
         use_cross_encoder=not args.no_cross_encoder,
-        device=args.device,
+        device="cuda",
     )
     retriever = TwoStageRetriever(
         store, embedder, reranker,
@@ -90,25 +160,33 @@ def main() -> None:
     )
 
     # -- Generator ------------------------------------------------------------
-    if args.generator == "llama":
-        generator = LlamaCppGenerator(
-            model_path=args.model_path,
-            n_gpu_layers=args.n_gpu_layers,
+    generator = LlamaCppGenerator(
+        repo_id=args.repo_id,
+        filename=args.filename,
+        n_gpu_layers=args.n_gpu_layers,
+        tensor_split=args.tensor_split,
+        context_length=args.context_length,
+    )
+
+    if args.n_gpu_layers == -1 and not args.no_cross_encoder and args.top_broad > 25:
+        print(
+            "[run_rag] Warning: high VRAM pressure configuration detected "
+            "(full offload + cross-encoder + high top_broad). "
+            "If CUDA aborts, try --top-broad 10 and/or --no-cross-encoder.",
+            file=sys.stderr,
         )
-    else:
-        generator = TemplateGenerator()
 
     pipeline = RAGPipeline(retriever, generator)
-    profile  = StudentProfile(base_level=args.level)
 
     # -- Initial query --------------------------------------------------------
-    print(f"\nQuery    : {args.query}")
-    print(f"Level    : {args.level}  |  {profile.summary()}")
-    print(f"Generator: {args.generator}")
+    print(f"\nMode     : {mode_label}")
+    print(f"Query    : {query or '(none — profile-driven)'}")
+    print(f"Level    : {level}  |  {profile.summary()}")
+    print(f"Model    : {args.repo_id} / {args.filename}")
     print("=" * 60)
 
     results = pipeline.recommend(
-        args.query, args.level,
+        query, level,
         top_k=args.top_k,
         student_profile=profile,
     )
@@ -135,11 +213,11 @@ def main() -> None:
                 print("  No new words (all already known).")
             print(f"  {profile.summary()}")
 
-            print(f"\n[RE-QUERY] Same query with updated vocabulary:")
+            print(f"\n[RE-QUERY] Same input with updated vocabulary:")
             print("=" * 60)
 
             updated = pipeline.recommend(
-                args.query, args.level,
+                query, level,
                 top_k=args.top_k,
                 student_profile=profile,
             )

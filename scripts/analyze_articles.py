@@ -96,6 +96,16 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
+DEFAULT_VOCAB_PATHS = {
+    "Beginner": DEFAULT_VOCABS["Beginner"],
+    "Intermediate": DEFAULT_VOCABS["Intermediate"],
+    "Advanced": DEFAULT_VOCABS["Advanced"],
+}
+
+DEFAULT_COVERAGE_MIN = 0.90
+DEFAULT_COVERAGE_MAX = 0.97
+
+
 
 def load_word_list(path: str) -> set[str]:
     """
@@ -183,11 +193,11 @@ def iter_vocab_paths(args: argparse.Namespace) -> Dict[str, str]:
 
 
 def analyze_articles(
-    input_path: str,
-    output_path: str,
-    vocab_paths: Dict[str, str],
-    coverage_min: float,
-    coverage_max: float,
+    input_path: str = DEFAULT_INPUT,
+    output_path: str = DEFAULT_OUTPUT,
+    vocab_paths: Dict[str, str] = DEFAULT_VOCAB_PATHS,
+    coverage_min: float = DEFAULT_COVERAGE_MIN,
+    coverage_max: float = DEFAULT_COVERAGE_MAX,
 ) -> None:
     """
     Analyze each article against each vocabulary list.
@@ -282,6 +292,7 @@ def analyze_articles(
                 record = {
                     "ID": row["id"],
                     "Title": row["title"],
+                    "Text": text,
                     "Level": level,
                     "Total_Words": total_words,
                     "Unique_Words": unique_words,

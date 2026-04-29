@@ -11,7 +11,7 @@ from transformers import AutoTokenizer
 
 DEFAULT_INPUT = "data/processed/wiki_clean.parquet"
 DEFAULT_OUTPUT = "data/processed/wiki_tokenized.parquet"
-DEFAULT_TOKENIZER = "meta-llama/Llama-3.2-1B-Instruct"
+DEFAULT_TOKENIZER = "sentence-transformers/all-MiniLM-L6-v2"
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,22 +45,33 @@ def validate_columns(df: pd.DataFrame) -> None:
         raise SystemExit(f"Missing required columns: {', '.join(sorted(missing))}")
 
 
-def main() -> None:
-    args = parse_args()
+def tokenize_articles(
+    input_path: str = DEFAULT_INPUT,
+    output_path: str = DEFAULT_OUTPUT,
+    tokenizer_name: str = DEFAULT_TOKENIZER,
+    max_length: int = 2048,
+    batch_size: int = 32,
+) -> None:
+    in_path = Path(input_path)
+    out_path = Path(output_path)
 
-    input_path = Path(args.input)
-    output_path = Path(args.output)
+    if not in_path.exists():
+        raise SystemExit(f"Input parquet not found: {in_path}")
 
-    if not input_path.exists():
-        raise SystemExit(f"Input parquet not found: {input_path}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    df = pd.read_parquet(input_path)
+    df = pd.read_parquet(in_path)
     validate_columns(df)
     df = ensure_id_column(df)
 
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=True)
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=True)
+    except OSError as exc:
+        raise SystemExit(
+            "Unable to load tokenizer. If the tokenizer repo is gated, your account must be "
+            "approved for that specific model. Try a public tokenizer with: "
+            "--tokenizer sentence-transformers/all-MiniLM-L6-v2"
+        ) from exc
 
     # Some causal LLM tokenizers do not define a pad token by default.
     if tokenizer.pad_token is None and tokenizer.eos_token is not None:
@@ -72,14 +83,14 @@ def main() -> None:
 
     texts = df["clean_text"].fillna("").astype(str).tolist()
 
-    for start in range(0, len(texts), args.batch_size):
-        batch = texts[start:start + args.batch_size]
+    for start in range(0, len(texts), batch_size):
+        batch = texts[start:start + batch_size]
 
         enc = tokenizer(
             batch,
             add_special_tokens=True,
             truncation=True,
-            max_length=args.max_length,
+            max_length=max_length,
             padding=False,
             return_attention_mask=True,
         )
@@ -90,15 +101,26 @@ def main() -> None:
             token_counts.append(len(input_ids))
 
     out_df = df.copy()
-    out_df["llm_tokenizer_name"] = args.tokenizer
+    out_df["llm_tokenizer_name"] = tokenizer_name
     out_df["llm_input_ids_json"] = ids_json
     out_df["llm_attention_mask_json"] = attn_json
     out_df["llm_token_count"] = token_counts
 
-    out_df.to_parquet(output_path, index=False)
-    print(f"Saved tokenized articles to {output_path}")
+    out_df.to_parquet(out_path, index=False)
+    print(f"Saved tokenized articles to {out_path}")
     print(f"Rows: {len(out_df)}")
-    print(f"Tokenizer: {args.tokenizer}")
+    print(f"Tokenizer: {tokenizer_name}")
+
+
+def main() -> None:
+    args = parse_args()
+    tokenize_articles(
+        input_path=args.input,
+        output_path=args.output,
+        tokenizer_name=args.tokenizer,
+        max_length=args.max_length,
+        batch_size=args.batch_size,
+    )
 
 
 if __name__ == "__main__":
