@@ -1,0 +1,39 @@
+{
+  "input_dir": "data/vocab_sources",
+  "output_dir": "vocab_output",
+  "runtime_vocab_dir": "data/vocab",
+  "only_band": "all",
+  "banned_words_count": 0,
+  "source_rows_loaded": 11773,
+  "unique_words_after_merge": 10996,
+  "exclusive_band_counts": {
+    "beginner": 1000,
+    "intermediate": 3000,
+    "advanced": 6000
+  },
+  "runtime_total_counts": {
+    "beginner": 1000,
+    "intermediate": 3000,
+    "advanced": 6000
+  },
+  "runtime_overlap_counts": {
+    "beginner_intermediate": 0,
+    "beginner_advanced": 0,
+    "intermediate_advanced": 0,
+    "all_three": 0
+  },
+  "expected_runtime_totals": {
+    "beginner": 1000,
+    "intermediate": 3000,
+    "advanced": 6000
+  },
+  "output_files": {
+    "master_csv": "vocab_output/master_vocab_scored.csv",
+    "beginner_band_csv": "vocab_output/beginner_band_1000.csv",
+    "intermediate_band_csv": "vocab_output/intermediate_band_3000.csv",
+    "advanced_band_csv": "vocab_output/advanced_band_6000.csv",
+    "beginner_txt": "data/vocab/beginner_1000.txt",
+    "intermediate_txt": "data/vocab/intermediate_3000.txt",
+    "advanced_txt": "data/vocab/advanced_6000.txt"
+  }
+}

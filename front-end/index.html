@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+
+        <meta charset="UTF-8"> 
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title> My Little Library </title>
+        <link rel="stylesheet" href="style.css">
+
+        <!-- Basic Icons -->
+        <link href="https://cdn.boxicons.com/3.0.8/fonts/basic/boxicons.min.css" rel="stylesheet">
+        <!-- Filled Icons -->
+        <link href="https://cdn.boxicons.com/3.0.8/fonts/filled/boxicons-filled.min.css" rel="stylesheet">
+        <!-- Brand Icons -->
+        <link href="https://cdn.boxicons.com/3.0.8/fonts/brands/boxicons-brands.min.css" rel="stylesheet">
+
+    </head>
+
+    <body>
+
+        <div class="wrapper">
+            
+            <!-- LOGIN PANEL -->
+            <form id="login-form">
+
+                <!--- Login Title --->
+                <h1 id="auth-title">Login</h1>
+
+                <!-- Error message area -->
+                <p id="auth-error" style="color:#ff6b6b;display:none;margin:0 0 8px;text-align:center;"></p>
+
+                <!--- Input Box for Username --->
+                <div class="input-box">
+                    <input type="text" id="auth-username" placeholder="Username" required>
+                    <i class="bx bx-user" style="color:#ffffff;"></i>
+                </div>
+
+                <!--- Input Box for Password --->
+                <div class="input-box">
+                    <input type="password" id="auth-password" placeholder="Password" required>
+                    <i class="bx bx-lock" style="color:#ffffff;"></i>
+                </div>
+
+                <!--- Remember Me Box (login mode only) --->
+                <div class="remember-forgot" id="remember-row">
+                    <label><input type="checkbox"> Remember me</label>
+                    <a href="#"> Forgot password</a>
+                </div>
+
+                <button type="submit" id="auth-submit-btn" class="btn">Login</button>
+
+                <!--- Register / Login toggle --->
+                <div class="register-link">
+                    <p id="auth-toggle-text">
+                        Don't have an account?
+                        <a href="#" id="auth-toggle-link">Register</a>
+                    </p>
+                </div>
+            </form>
+
+        </div>
+
+        <script src="login.js"></script>
+
+    </body>
+
+</html>
