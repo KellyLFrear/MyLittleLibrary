@@ -271,7 +271,7 @@ body {
 
 /* Moves Generator Box */
 .suggestion-generator-box {
-    margin-top: rem;
+    margin-top: 1rem;
     padding: 1rem;
     border-radius: .3rem;
 }

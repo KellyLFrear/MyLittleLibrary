@@ -30,6 +30,7 @@ GET   /api/story/list           — list saved stories for the user
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 import sys
 from functools import wraps
@@ -91,19 +92,25 @@ def _json_error(message: str, status: int = 400) -> tuple[Response, int]:
     return jsonify({"error": message}), status
 
 
-def _check_legacy_hash(plaintext: str, stored_hash: str) -> bool:
-    """
-    Accept passwords that were hashed with the legacy sha256 scheme used by
-    seed_test_users.py  (hashlib.sha256(b"password").hexdigest()).
-    """
-    return hashlib.sha256(plaintext.encode()).hexdigest() == stored_hash
+def _is_legacy_hash(stored_hash: str) -> bool:
+    """Return True if the hash looks like a raw sha256 hex digest (64 hex chars, no colon prefix)."""
+    return len(stored_hash) == 64 and stored_hash.isalnum() and ":" not in stored_hash
 
 
 def _verify_password(plaintext: str, stored_hash: str) -> bool:
-    """Try werkzeug pbkdf2 first, then fall back to legacy sha256."""
-    if stored_hash.startswith("pbkdf2:") or stored_hash.startswith("scrypt:"):
+    """
+    Verify a password against its stored hash.
+
+    * New accounts use werkzeug's pbkdf2/scrypt hashing.
+    * Accounts seeded by seed_test_users.py have a legacy raw-sha256 hash.
+      These are accepted for backwards compatibility, and the caller should
+      immediately upgrade the hash in the database (see the login endpoint).
+    """
+    if not _is_legacy_hash(stored_hash):
         return check_password_hash(stored_hash, plaintext)
-    return _check_legacy_hash(plaintext, stored_hash)
+    # Legacy check — constant-time comparison to resist timing attacks
+    expected = hashlib.sha256(plaintext.encode()).hexdigest()
+    return hmac.compare_digest(expected, stored_hash)
 
 
 def login_required(f):
@@ -180,6 +187,15 @@ def login():
 
     if user is None or not _verify_password(password, user["password_hash"]):
         return _json_error("Invalid username or password", 401)
+
+    # Upgrade legacy sha256 hash to werkzeug pbkdf2 on successful login
+    if _is_legacy_hash(user["password_hash"]):
+        new_hash = generate_password_hash(password)
+        with get_db(DB_PATH) as conn:
+            conn.execute(
+                "UPDATE users SET password_hash = ? WHERE user_id = ?",
+                (new_hash, user["user_id"]),
+            )
 
     session["user_id"] = user["user_id"]
     session["username"] = user["username"]
