@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+
+        <meta charset="="UTF-8"> 
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title> My Little Library </title>
+        <link rel="stylesheet" href="main_page_stylesheet.css">
+    
+        <!-- Basic Icons -->
+        <link href="https://cdn.boxicons.com/3.0.8/fonts/basic/boxicons.min.css" rel="stylesheet">
+        <!-- Filled Icons -->
+        <link href="https://cdn.boxicons.com/3.0.8/fonts/filled/boxicons-filled.min.css" rel="stylesheet">
+        <!-- Brand Icons -->
+        <link href="https://cdn.boxicons.com/3.0.8/fonts/brands/boxicons-brands.min.css" rel="stylesheet">
+
+    </head>
+
+    <body>
+
+        <div class="wrapper">
+
+            <div class="cover cover-left"></div>
+            <div class="cover cover-right"></div>
+
+            <div class="book">
+
+                <!--- Profile Page --->
+                <div class="book-page page-left">
+
+                    <div class="profile-page">
+                        <!-- REPLACE THE PROFILE PICTURE LATER ON-->
+                        <img src="/front-end/images/blank_profile_picture.jpg" alt="">
+
+                        <!-- REPLACE THE PROFILE NAME LATER ON-->
+                        <h1> FirstName LastName</h1>
+
+                        <!-- REPLACE THE READING LEVEL LATER ON-->
+                        <h3> Average Reading Level : </h3>
+                        
+                        <!-- AVERAGE READING LVL GRAPH THAT'LL BE UPDATED -->
+                         <div class="graph-box">
+                            <img src="/front-end/images/blank_graph.jpg" alt="">
+                         </div>
+
+                         <div class="graph-info-box">
+                            <div class="graph-info-title">
+                                <h2>Reading Progress</h2>
+                            </div>
+                         </div>
+
+                        <!-- Profile Button -->
+                        <div class="btn-box">
+                            <a href="#" class="btn generate-story-page-btn">Generate Story</a>
+                            <a href="#" class="btn add-to-library-page-btn">Add To Library</a>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!--- Pages 1 & 2 --->
+                <div class="book-page page-right turn" id="turn-1">
+                    <!-- Page 1: Library List Page -->
+                    <div class="page-front">
+                        <h1 class="title">Book Suggestions</h1>
+
+                        <div class="book-recomendation-box">
+                            <!--- Book Suggestion #1 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                                <p>Temporary Rationale Section For Books</p>
+                            </div>
+
+                            <!--- Book Suggestion #2 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                                <p>Temporary Rationale Section For Books</p>
+                            </div>
+
+                            <!--- Book Suggestion #3 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                                <p>Temporary Rationale Section For Books</p>
+                            </div>
+                        </div>
+
+                        <!-- Book Suggestion Generator Box -->
+                        <div class="suggestion-generator-box">
+                            <h3>What Would You Like Your Next Read To Be About?</h3>
+
+                            <form action="#">
+                                <textarea class="field" rows="2" placeholder="Please Enter Keywords Or A Summary" required></textarea>
+                                <input type="submit" class="btn" value="Generate">
+                            </form>
+                        </div>
+
+                        <!-- Page Number -->
+                        <span class="page-number">1</span>
+
+                        <!-- Next Button -->
+                         <span class="nextprev-btn" data-page="turn-1">
+                            <i class="bx bx-chevron-right"></i>
+                         </span>
+                    </div>
+
+
+                    <!-- Page 2: Library List Page #1 -->
+                    <div class="page-back">
+                        <h1 class="title">Your Library</h1>
+                         
+                        <div class="book-recomendation-box">
+                            <!--- User's Read Book #1 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                            </div>
+
+                            <!--- User's Read Book #2 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                            </div>
+
+                            <!--- User's Read Book #3 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                            </div>
+
+                            <!--- User's Read Book #4 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                            </div>
+
+                            <!--- User's Read Book #5 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                            </div>
+                            
+                            <!--- User's Read Book #6 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                            </div>
+
+                            <!--- User's Read Book #7 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                            </div>
+                        </div>
+
+                        <!-- Page Number -->
+                        <span class="page-number">2</span>
+
+                        <!-- Prev Button -->
+                         <span class="nextprev-btn back" data-page="turn-1">
+                            <i class="bx bx-chevron-left"></i>
+                         </span>
+
+                    </div>
+
+                </div>
+                
+
+                <!--- Pages 3 & 4 --->
+                <div class="book-page page-right turn" id="turn-2">
+                    <!-- Page 3: Library List Page #2 -->
+                    <div class="page-front">
+                        <h1 class="title">Your Library</h1>
+
+                        <div class="book-recomendation-box">
+                            <!--- User's Read Book #8 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                            </div>
+
+                            <!--- User's Read Book #9 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                            </div>
+
+                            <!--- User's Read Book #10 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                            </div>
+
+                            <!--- User's Read Book #11 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                            </div>
+
+                            <!--- User's Read Book #12 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                            </div>
+                            
+                            <!--- User's Read Book #13 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                            </div>
+
+                            <!--- User's Read Book #14 --->
+                            <div class="bookbox-content">
+                                <h3>TEMPORARY TITLE</h3>
+                                <span class="reading_level"><i class="bx bx-book"></i>Reading Level: </span>
+                            </div>
+                        </div>
+
+                        <!-- Page Number -->
+                        <span class="page-number">3</span>
+
+                        <!-- Next Button -->
+                         <span class="nextprev-btn" data-page="turn-2">
+                            <i class="bx bx-chevron-right"></i>
+                         </span>
+
+                    </div>
+                
+
+                <!-- Page 4: Add To Library -->
+                    <div class="page-back">
+                        <h1 class="title">Add Your Own Book</h1>
+                    
+                        <div class="add-custom-book">
+                            <form action="#">
+                                <input type="text" class="field" placeholder="Title" required>
+                                <textarea name="" id="" cols="30" rows="10" class="field" placeholder="Body Matter" required></textarea>
+                                <input type="submit" class="btn" value="Add To Library">
+                            </form>
+                        </div>
+
+                        <!-- Page Number -->
+                        <span class="page-number">4</span>
+
+                        <!-- Prev Button -->
+                         <span class="nextprev-btn back" data-page="turn-2">
+                            <i class="bx bx-chevron-left"></i>
+                         </span>
+
+                    </div>
+                </div>
+
+                <!--- Pages 5 & 6 --->
+                <div class="book-page page-right turn" id="turn-3">
+                    
+                    <!-- Page 5: Search For Book -->
+                    <div class="page-front">
+                        <h1 class="title">Search For Book</h1>
+                    
+                        <div class="search-for-book">
+
+                            <h2> Please Input Your Book's Title That You'd Like To Search For: </h2>
+                            <form action="#">
+                                <input type="text" class="field" placeholder="Title" required>
+                                <input type="submit" class="btn" value="Search">
+                            </form>
+                        </div>
+
+                        <!-- Page Number -->
+                        <span class="page-number">5</span>
+
+                        <!-- Prev Button -->
+                         <span class="nextprev-btn" data-page="turn-3">
+                            <i class="bx bx-chevron-right"></i>
+                         </span>
+
+                    </div>
+
+
+                    <!-- Page 6: Generate Story Page -->
+                     <div class="page-back">
+                        <h1 class="title">Generate Story</h1>
+
+                        <div class="generate-story-page">
+                            <div class="generate-story-message">
+                                <h3>Click The Button To Generate A Story Based Off Your Reading Level:</h3>
+                            
+                            <form action="#">
+                                <textarea name="" id="" cols="30" rows="2" class="field" placeholder="Topic" required></textarea>
+                                <input type="submit" class="btn" value="Generate">
+                            </form>
+
+                            <!-- Container For The Story That'll Appear When Generatred-->
+                             <div class="generated-story-container">
+                                
+                                <!-- Story That Pops Up When Generated-->
+                                <p>TEMPORARY STORY!! MAKE IT BE DISAPPEAR AT FIRST</p>
+
+                            </div>
+
+                            <!-- Button To Save The Story -->
+                            <input type="submit" class="btn save-story-btn" value="Save Story">
+                        
+                        </div>
+                    </div>
+
+                        <!-- Page Number -->
+                        <span class="page-number">6</span>
+
+                        <!-- Prev Button -->
+                         <span class="nextprev-btn back" data-page="turn-3">
+                            <i class="bx bx-chevron-left"></i>
+                         </span>
+
+                         <a href="#" class="back-profile">
+                            <p>Profile</p>
+                            <i class="bx bx-user"></i>
+
+                         </a>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <script src="script.js"></script>
+
+    </body>
+
+</html>
