@@ -6,14 +6,11 @@ Purpose:
 - Read raw vocabulary source files from an input folder
 - Normalize and merge their rows
 - Score each word for Beginner / Intermediate / Advanced suitability
-- Build three exclusive internal bands:
-    * beginner add-on = 1000 words
-    * intermediate add-on = 2000 words
-    * advanced add-on = 3000 words
-- Write cumulative runtime files:
-    * beginner_1000.txt      -> 1000 total words
-    * intermediate_3000.txt  -> 3000 total words
-    * advanced_6000.txt      -> 6000 total words
+- Build three exclusive runtime bands:
+    * beginner_1000.txt      -> 1000 beginner-only words
+    * intermediate_3000.txt  -> 3000 intermediate-only words
+    * advanced_6000.txt      -> 6000 advanced-only words
+- Guarantee that the three runtime files do not overlap.
 
 Big picture:
 This is the script that turns many possible source lists into the final project
@@ -42,15 +39,15 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple
 # apostrophes or hyphens such as "can't" or "well-known".
 WORD_RE = re.compile(r"^[a-z]+(?:['-][a-z]+)*$")
 
-# Final cumulative vocabulary totals required by the project at runtime.
+# Final exclusive vocabulary sizes required by the project at runtime.
+# These are NOT cumulative. Each level gets its own separate list.
 RUNTIME_BEGINNER_TOTAL = 1000
 RUNTIME_INTERMEDIATE_TOTAL = 3000
 RUNTIME_ADVANCED_TOTAL = 6000
 
-# Internal exclusive band sizes. These are the increments added at each stage.
-BEGINNER_ADDON_SIZE = RUNTIME_BEGINNER_TOTAL
-INTERMEDIATE_ADDON_SIZE = RUNTIME_INTERMEDIATE_TOTAL - RUNTIME_BEGINNER_TOTAL  # 2000
-ADVANCED_ADDON_SIZE = RUNTIME_ADVANCED_TOTAL - RUNTIME_INTERMEDIATE_TOTAL      # 3000
+BEGINNER_EXCLUSIVE_SIZE = RUNTIME_BEGINNER_TOTAL
+INTERMEDIATE_EXCLUSIVE_SIZE = RUNTIME_INTERMEDIATE_TOTAL
+ADVANCED_EXCLUSIVE_SIZE = RUNTIME_ADVANCED_TOTAL
 
 BEGINNER_GRADE_HINT = "k-5th grade"
 INTERMEDIATE_GRADE_HINT = "6-8"
@@ -71,10 +68,10 @@ CANONICAL_RUNTIME_TOTALS = {
     "advanced": RUNTIME_ADVANCED_TOTAL,
 }
 
-EXCLUSIVE_ADDON_SIZES = {
-    "beginner": BEGINNER_ADDON_SIZE,
-    "intermediate": INTERMEDIATE_ADDON_SIZE,
-    "advanced": ADVANCED_ADDON_SIZE,
+EXCLUSIVE_BAND_SIZES = {
+    "beginner": BEGINNER_EXCLUSIVE_SIZE,
+    "intermediate": INTERMEDIATE_EXCLUSIVE_SIZE,
+    "advanced": ADVANCED_EXCLUSIVE_SIZE,
 }
 
 EXPLICIT_GRADE_HINT_ALIASES = {
@@ -671,15 +668,15 @@ def build_exclusive_bands(all_entries_sorted: List[VocabEntry]) -> Dict[str, Lis
     """Build non-overlapping beginner, intermediate, and advanced add-on bands."""
     remaining = {entry.word: entry for entry in all_entries_sorted}
 
-    beginner = take_band(remaining.values(), "beginner", BEGINNER_ADDON_SIZE)
+    beginner = take_band(remaining.values(), "beginner", BEGINNER_EXCLUSIVE_SIZE)
     for entry in beginner:
         remaining.pop(entry.word, None)
 
-    intermediate = take_band(remaining.values(), "intermediate", INTERMEDIATE_ADDON_SIZE)
+    intermediate = take_band(remaining.values(), "intermediate", INTERMEDIATE_EXCLUSIVE_SIZE)
     for entry in intermediate:
         remaining.pop(entry.word, None)
 
-    advanced = take_band(remaining.values(), "advanced", ADVANCED_ADDON_SIZE)
+    advanced = take_band(remaining.values(), "advanced", ADVANCED_EXCLUSIVE_SIZE)
 
     return {
         "beginner": beginner,
@@ -691,10 +688,10 @@ def build_exclusive_bands(all_entries_sorted: List[VocabEntry]) -> Dict[str, Lis
 def validate_needed(selection: Dict[str, List[VocabEntry]], requested_band: str, allow_shortfall: bool) -> None:
     """Ensure enough words were found to satisfy the requested target sizes."""
     requirements = {
-        "beginner": {"beginner": BEGINNER_ADDON_SIZE},
-        "intermediate": {"beginner": BEGINNER_ADDON_SIZE, "intermediate": INTERMEDIATE_ADDON_SIZE},
-        "advanced": {"beginner": BEGINNER_ADDON_SIZE, "intermediate": INTERMEDIATE_ADDON_SIZE, "advanced": ADVANCED_ADDON_SIZE},
-        "all": {"beginner": BEGINNER_ADDON_SIZE, "intermediate": INTERMEDIATE_ADDON_SIZE, "advanced": ADVANCED_ADDON_SIZE},
+        "beginner": {"beginner": BEGINNER_EXCLUSIVE_SIZE},
+        "intermediate": {"beginner": BEGINNER_EXCLUSIVE_SIZE, "intermediate": INTERMEDIATE_EXCLUSIVE_SIZE},
+        "advanced": {"beginner": BEGINNER_EXCLUSIVE_SIZE, "intermediate": INTERMEDIATE_EXCLUSIVE_SIZE, "advanced": ADVANCED_EXCLUSIVE_SIZE},
+        "all": {"beginner": BEGINNER_EXCLUSIVE_SIZE, "intermediate": INTERMEDIATE_EXCLUSIVE_SIZE, "advanced": ADVANCED_EXCLUSIVE_SIZE},
     }[requested_band]
 
     missing = {}
@@ -713,15 +710,33 @@ def validate_needed(selection: Dict[str, List[VocabEntry]], requested_band: str,
     )
 
 
-def cumulative_runtime_rows(selection: Dict[str, List[VocabEntry]], band: str) -> List[VocabEntry]:
-    """Return the cumulative runtime list for a band, including lower bands below it."""
-    if band == "beginner":
-        return list(selection["beginner"])
-    if band == "intermediate":
-        return list(selection["beginner"]) + list(selection["intermediate"])
-    if band == "advanced":
-        return list(selection["beginner"]) + list(selection["intermediate"]) + list(selection["advanced"])
-    raise ValueError(f"Unknown band: {band}")
+def runtime_rows_for_band(selection: Dict[str, List[VocabEntry]], band: str) -> List[VocabEntry]:
+    """Return the exclusive runtime list for one band only.
+
+    Important:
+    - Beginner returns only beginner words.
+    - Intermediate returns only intermediate words.
+    - Advanced returns only advanced words.
+
+    Lower-level words are NOT included in higher-level runtime files.
+    """
+    if band not in selection:
+        raise ValueError(f"Unknown band: {band}")
+    return list(selection[band])
+
+
+def overlap_report(selection: Dict[str, List[VocabEntry]]) -> Dict[str, int]:
+    """Return overlap counts between exclusive runtime bands."""
+    beginner = {entry.word for entry in selection.get("beginner", [])}
+    intermediate = {entry.word for entry in selection.get("intermediate", [])}
+    advanced = {entry.word for entry in selection.get("advanced", [])}
+
+    return {
+        "beginner_intermediate": len(beginner & intermediate),
+        "beginner_advanced": len(beginner & advanced),
+        "intermediate_advanced": len(intermediate & advanced),
+        "all_three": len(beginner & intermediate & advanced),
+    }
 
 
 def entry_to_row(entry: VocabEntry, band: Optional[str] = None) -> Dict[str, str]:
@@ -810,7 +825,7 @@ def write_txt(path: Path, rows: List[VocabEntry]) -> None:
 
 
 def write_runtime_file(runtime_dir: Path, band: str, rows: List[VocabEntry]) -> str:
-    """Write the final runtime TXT file for one cumulative band and return its path."""
+    """Write the final exclusive runtime TXT file for one band and return its path."""
     runtime_dir.mkdir(parents=True, exist_ok=True)
     name_map = {
         "beginner": "beginner_1000.txt",
@@ -860,9 +875,9 @@ def main() -> None:
 
     # Write exclusive band CSVs.
     csv_specs = {
-        "beginner": ("beginner_band_1000.csv", BEGINNER_ADDON_SIZE),
-        "intermediate": ("intermediate_band_2000.csv", INTERMEDIATE_ADDON_SIZE),
-        "advanced": ("advanced_band_3000.csv", ADVANCED_ADDON_SIZE),
+        "beginner": ("beginner_band_1000.csv", BEGINNER_EXCLUSIVE_SIZE),
+        "intermediate": ("intermediate_band_3000.csv", INTERMEDIATE_EXCLUSIVE_SIZE),
+        "advanced": ("advanced_band_6000.csv", ADVANCED_EXCLUSIVE_SIZE),
     }
     if args.only_band == "all":
         csv_bands = ["beginner", "intermediate", "advanced"]
@@ -875,18 +890,18 @@ def main() -> None:
         write_csv(csv_path, exclusive[band], band)
         output_files[f"{band}_band_csv"] = str(csv_path)
 
-    # Write runtime cumulative TXT files.
+    # Write runtime exclusive TXT files.
     if args.only_band == "all":
         runtime_bands = ["beginner", "intermediate", "advanced"]
     else:
         runtime_bands = [args.only_band]
 
     for band in runtime_bands:
-        runtime_rows = cumulative_runtime_rows(exclusive, band)
+        runtime_rows = runtime_rows_for_band(exclusive, band)
         runtime_counts[band] = len({entry.word for entry in runtime_rows})
         output_files[f"{band}_txt"] = write_runtime_file(runtime_dir, band, runtime_rows)
 
-    # Record a machine-readable summary so you can verify counts and output paths.
+    # Record a machine-readable summary so I can verify counts and output paths.
     summary = {
         "input_dir": str(input_dir),
         "output_dir": str(output_dir),
@@ -897,6 +912,7 @@ def main() -> None:
         "unique_words_after_merge": len(all_entries_sorted),
         "exclusive_band_counts": exclusive_counts,
         "runtime_total_counts": runtime_counts,
+        "runtime_overlap_counts": overlap_report(exclusive),
         "expected_runtime_totals": (
             CANONICAL_RUNTIME_TOTALS if args.only_band == "all"
             else {args.only_band: CANONICAL_RUNTIME_TOTALS[args.only_band]}
