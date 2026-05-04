@@ -1,6 +1,43 @@
-# Intelligent Vocabulary Recommender System
+# Intelligent Vocabulary Recommender System — My Little Library
 
 CSUSM Final Sprint Challenge project for building a vocabulary-aware reading recommender over a Wikipedia corpus.
+
+---
+
+## Running the Web App
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Start the Flask server (default port 5000)
+python app.py
+
+# Then open http://localhost:5000 in your browser
+```
+
+The web app provides:
+- **Login / Register** — create an account or sign in
+- **Profile page** — shows your name and current reading level
+- **Book Suggestions** — get book recommendations from the RAG pipeline (or type a topic)
+- **Your Library** — books you have added
+- **Add Book** — upload a book title and body text
+- **Search** — find books by title
+- **Generate Story** — generate a personalised story at your reading level
+
+> **Note:** Story generation and new recommendation generation require the FAISS index
+> (`data/faiss_index/`) and a GGUF language model to be set up.
+> See the pipeline setup sections below for instructions.
+> Without them the app still runs — it shows existing DB recommendations and
+> a placeholder story.
+
+To seed test users with pre-built reading profiles and book recommendations:
+```bash
+python scripts/seed_test_users.py
+# credentials: test_beginner / test_intermediate / test_advanced — password: test123
+```
+
+---
 
 This repository now has a working **Deliverable 1 data pipeline** for:
 
