@@ -22,39 +22,47 @@
 
         <div class="wrapper">
             
-            <form action="">
+            <!-- LOGIN PANEL -->
+            <form id="login-form">
 
                 <!--- Login Title --->
-                <h1>Login</h1>
+                <h1 id="auth-title">Login</h1>
+
+                <!-- Error message area -->
+                <p id="auth-error" style="color:#ff6b6b;display:none;margin:0 0 8px;text-align:center;"></p>
 
                 <!--- Input Box for Username --->
                 <div class="input-box">
-                    <input type="text" placeholder="Username" required>
+                    <input type="text" id="auth-username" placeholder="Username" required>
                     <i class="bx bx-user" style="color:#ffffff;"></i>
                 </div>
 
                 <!--- Input Box for Password --->
                 <div class="input-box">
-                    <input type="password" placeholder="Password" required>
+                    <input type="password" id="auth-password" placeholder="Password" required>
                     <i class="bx bx-lock" style="color:#ffffff;"></i>
                 </div>
 
-                <!--- Remember Me Box --->
-                <div class="remember-forgot">
-
-                    <label><input type ="checkbox"> Remember me</label>
+                <!--- Remember Me Box (login mode only) --->
+                <div class="remember-forgot" id="remember-row">
+                    <label><input type="checkbox"> Remember me</label>
                     <a href="#"> Forgot password</a>
                 </div>
 
-                <button type="submit" class="btn">Login</button>
+                <button type="submit" id="auth-submit-btn" class="btn">Login</button>
 
-                <!--- Register Link (For Aesthetics) --->
+                <!--- Register / Login toggle --->
                 <div class="register-link">
-                    <p>Don't have an account? <a href="#">Register</a></p>
+                    <p id="auth-toggle-text">
+                        Don't have an account?
+                        <a href="#" id="auth-toggle-link">Register</a>
+                    </p>
                 </div>
             </form>
 
         </div>
+
+        <script src="login.js"></script>
 
     </body>
 

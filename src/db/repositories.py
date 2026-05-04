@@ -578,3 +578,110 @@ def get_story_by_id(
     if result.get("prompt_used"):
         result["prompt_meta"] = json.loads(result["prompt_used"])
     return result
+
+
+# ── User library (user-submitted books / user_sources) ─────────────────────────
+
+def add_user_book(
+    conn: sqlite3.Connection,
+    *,
+    user_id: int,
+    title: str,
+    body_text: str,
+) -> int:
+    """
+    Save a user-submitted book (title + body) to user_sources.
+    Returns the new ``source_id``.
+    """
+    cur = conn.execute(
+        """
+        INSERT INTO user_sources (user_id, title, source_type, raw_text)
+        VALUES (?, ?, 'uploaded_book', ?)
+        """,
+        (user_id, title, body_text),
+    )
+    return cur.lastrowid  # type: ignore[return-value]
+
+
+def get_user_library(
+    conn: sqlite3.Connection,
+    user_id: int,
+    limit: int = 50,
+) -> List[Dict[str, Any]]:
+    """
+    Return user-submitted books from user_sources, newest first.
+    """
+    rows = conn.execute(
+        """
+        SELECT source_id, title, source_type, created_at
+        FROM user_sources
+        WHERE user_id = ? AND source_type = 'uploaded_book'
+        ORDER BY created_at DESC
+        LIMIT ?
+        """,
+        (user_id, limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── Book search ────────────────────────────────────────────────────────────────
+
+def search_books_by_title(
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int = 20,
+) -> List[Dict[str, Any]]:
+    """
+    Case-insensitive substring search across both the ``books`` table (Wikipedia
+    articles / system books) and the ``user_sources`` table (user-uploaded books).
+
+    Each result dict always contains the keys:
+      ``source`` ("system" | "user"), ``title``, ``author`` (may be None),
+      and either ``book_id`` or ``source_id``.
+    """
+    pattern = f"%{query}%"
+
+    system_rows = conn.execute(
+        """
+        SELECT book_id, title, author
+        FROM books
+        WHERE title LIKE ?
+        ORDER BY title
+        LIMIT ?
+        """,
+        (pattern, limit),
+    ).fetchall()
+
+    user_rows = conn.execute(
+        """
+        SELECT source_id, title
+        FROM user_sources
+        WHERE source_type = 'uploaded_book' AND title LIKE ?
+        ORDER BY title
+        LIMIT ?
+        """,
+        (pattern, limit),
+    ).fetchall()
+
+    results: List[Dict[str, Any]] = []
+    for r in system_rows:
+        results.append({"source": "system", "book_id": r["book_id"],
+                         "title": r["title"], "author": r["author"]})
+    for r in user_rows:
+        results.append({"source": "user", "source_id": r["source_id"],
+                         "title": r["title"], "author": None})
+    return results[:limit]
+
+
+# ── User account ───────────────────────────────────────────────────────────────
+
+def update_user_display_name(
+    conn: sqlite3.Connection,
+    user_id: int,
+    display_name: str,
+) -> None:
+    """Update a user's display name."""
+    conn.execute(
+        "UPDATE users SET display_name = ? WHERE user_id = ?",
+        (display_name, user_id),
+    )
