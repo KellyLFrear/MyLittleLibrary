@@ -73,8 +73,9 @@ class LlamaCppGenerator:
 
     def __init__(
         self,
-        repo_id: str,
-        filename: str,
+        repo_id: str = "",
+        filename: str = "",
+        model_path: Optional[str] = None,
         n_gpu_layers: int = -1,
         tensor_split: Optional[List[float]] = None,
         context_length: int = 4096,
@@ -82,6 +83,8 @@ class LlamaCppGenerator:
         max_tokens: int = 512,
     ):
         from llama_cpp import Llama
+
+        os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
         split: Optional[List[float]] = None
         if tensor_split is not None:
@@ -102,9 +105,12 @@ class LlamaCppGenerator:
             total = float(sum(tensor_split))
             split = [float(v) / total for v in tensor_split]
 
-        local_path = Path(filename)
-        if not local_path.is_absolute():
-            local_path = Path.cwd() / local_path
+        if model_path is not None:
+            resolved_path = Path(model_path)
+        else:
+            resolved_path = Path(filename)
+            if not resolved_path.is_absolute():
+                resolved_path = Path.cwd() / resolved_path
 
         common_kwargs = dict(
             n_ctx=context_length,
@@ -113,9 +119,14 @@ class LlamaCppGenerator:
             tensor_split=split,
             verbose=False,
         )
-        if local_path.exists():
-            self.llm = Llama(model_path=str(local_path), **common_kwargs)
+        if resolved_path.exists():
+            self.llm = Llama(model_path=str(resolved_path), **common_kwargs)
         else:
+            if not repo_id or not filename:
+                raise ValueError(
+                    f"Model file not found at '{resolved_path}' and no repo_id/filename "
+                    "provided for download."
+                )
             self.llm = Llama.from_pretrained(
                 repo_id=repo_id,
                 filename=filename,

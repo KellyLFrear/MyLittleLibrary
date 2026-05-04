@@ -300,8 +300,7 @@ def generate_recommendations():
         vector_store = FAISSVectorStore.load(faiss_index_dir)
         retriever = TwoStageRetriever(vector_store)
         generator = LlamaCppGenerator(
-            repo_id="bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
-            filename="Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+            model_path=str(_HERE / "models" / "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"),
         )
         pipeline = RAGPipeline(retriever, generator)
 
@@ -420,8 +419,7 @@ def story_generate():
             student = StudentProfile.from_db(user_id=user_id, conn=conn)
 
         generator = LlamaCppGenerator(
-            repo_id="bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
-            filename="Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+            model_path=str(_HERE / "models" / "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"),
         )
         result = generator.generate_story(
             vocab_level=student.base_level,
