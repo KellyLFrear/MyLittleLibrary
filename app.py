@@ -288,8 +288,10 @@ def generate_recommendations():
         })
 
     try:
+        from src.embeddings.embedder import ArticleEmbedder
         from src.embeddings.vector_store import FAISSVectorStore
         from src.rag.pipeline import LlamaCppGenerator, RAGPipeline
+        from src.rag.reranker import VocabAwareReranker
         from src.rag.retriever import TwoStageRetriever
         from src.rag.student_profile import StudentProfile
         from src.db.repositories import save_book_recommendations, upsert_book
@@ -298,7 +300,9 @@ def generate_recommendations():
             student = StudentProfile.from_db(user_id=user_id, conn=conn)
 
         vector_store = FAISSVectorStore.load(faiss_index_dir)
-        retriever = TwoStageRetriever(vector_store)
+        embedder = ArticleEmbedder()
+        reranker = VocabAwareReranker()
+        retriever = TwoStageRetriever(vector_store, embedder, reranker)
         generator = LlamaCppGenerator(
             model_path=str(_HERE / "models" / "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"),
         )
@@ -405,7 +409,7 @@ def story_generate():
     data: Dict[str, Any] = request.get_json(silent=True) or {}
     topic: str | None = (data.get("topic") or "").strip() or None
     genre: str = (data.get("genre") or "adventure").strip()
-    challenge: str = (data.get("challenge") or "medium").strip()
+    challenge: str = (data.get("challenge") or "high").strip()
 
     faiss_index_dir = _HERE / "data" / "faiss_index"
 

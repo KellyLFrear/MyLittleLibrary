@@ -162,6 +162,10 @@ function escapeHtml(str) {
 
 // ── Load profile on page open ─────────────────────────────────────────────────
 
+let _profileChart = null;
+
+const LEVEL_VALUE = { Beginner: 1, Intermediate: 2, Advanced: 3 };
+
 async function loadProfile() {
     const res = await apiFetch('/api/profile');
     if (!res) return;
@@ -181,6 +185,80 @@ async function loadProfile() {
             || '—';
         levelEl.textContent = `Average Reading Level : ${lvl}`;
     }
+
+    // ── Reading progress chart ────────────────────────────────────────────
+    const canvas = document.getElementById('profile-graph');
+    if (!canvas || typeof Chart === 'undefined') return;
+
+    const history = (data.reading_history || []).slice().reverse(); // oldest first
+
+    // If no history yet, show a single point at the current level
+    const points = history.length > 0 ? history : (
+        data.current_profile ? [{
+            created_at: data.current_profile.created_at,
+            estimated_level: data.current_profile.estimated_level,
+        }] : []
+    );
+
+    const labels = points.map(p => {
+        const d = new Date(p.created_at);
+        return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    });
+    const values = points.map(p => LEVEL_VALUE[p.estimated_level] ?? null);
+
+    if (_profileChart) {
+        _profileChart.destroy();
+        _profileChart = null;
+    }
+
+    _profileChart = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Reading Level',
+                data: values,
+                borderColor: '#4a90e2',
+                backgroundColor: 'rgba(74,144,226,0.15)',
+                pointBackgroundColor: '#4a90e2',
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3,
+                spanGaps: false,
+            }],
+        },
+        options: {
+            responsive: false,
+            animation: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ['', 'Beginner', 'Intermediate', 'Advanced'][ctx.parsed.y] || '',
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#333', font: { size: 9 }, maxRotation: 30 },
+                    grid: { color: 'rgba(0,0,0,0.07)' },
+                },
+                y: {
+                    min: 0.5,
+                    max: 3.5,
+                    ticks: {
+                        stepSize: 1,
+                        color: '#333',
+                        font: { size: 9 },
+                        callback: v => ['', 'Beginner', 'Intermediate', 'Advanced'][v] || '',
+                    },
+                    grid: { color: 'rgba(0,0,0,0.07)' },
+                },
+            },
+        },
+    });
 }
 
 // ── Load book recommendations ─────────────────────────────────────────────────

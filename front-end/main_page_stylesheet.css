@@ -140,14 +140,14 @@ body {
 }
 
 /* Resizes Graph */
-.graph-box img {
-   width: 300px;
-   height: 175px;
-   object-fit: cover;
+.graph-box canvas {
+   width: 300px !important;
+   height: 175px !important;
    border-radius: .3rem;
    border: .25rem solid var(--main-color);
    margin-top: .6rem;
    margin-bottom: .1rem;
+   background: #fff;
 }
 
 /* Moves The Button Section Down */
@@ -262,6 +262,23 @@ body {
 /* Reading Level Text Color */
 .bookbox-content .reading_level {
     color: var(--main-color);
+}
+
+/* Resizes the Suggestion Title */
+.bookbox-content h3 {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* Resizes the Reading Level */
+.bookbox-content .reading_level {
+    font-size: .85rem;
+}
+
+/* Resizes the Content */
+.bookbox-content p{
+    font-size: .8rem;
+    color: var(--second-text-color);
 }
 
 /* Book Icon */
@@ -413,14 +430,6 @@ body {
     height: 10rem;
     overflow-y: auto;
     text-align: left;
-}
-
-/* Save Story Button */
-.save-story-btn {
-    margin-top: 2rem;
-    align-self: flex-start;
-    margin-left: 0;
-    width: 9.5rem;
 }
 
 /* Page Numbers and Pointers */
