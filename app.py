@@ -36,7 +36,8 @@ import sys
 from functools import wraps
 from pathlib import Path
 from typing import Any, Dict
-
+import time
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")  # Restrict CUDA libraries to GPU 0.
 from flask import (
     Flask,
     Response,
@@ -85,6 +86,86 @@ DB_PATH = _HERE / "data" / "library.db"
 with app.app_context():
     init_db(DB_PATH)
 
+_RAG_PIPELINE = None
+_LLAMA_GENERATOR = None
+
+
+def get_llama_generator():
+    """
+    Lazily load and cache the shared LLaMA generator.
+
+    This same generator is reused for:
+    - RAG recommendation explanations
+    - story generation
+
+    Benefit:
+    - avoids reloading/reinitializing LLaMA for every story request
+    - avoids creating multiple CUDA llama.cpp contexts
+    - makes story generation faster after the first load
+    """
+    global _LLAMA_GENERATOR
+
+    if _LLAMA_GENERATOR is not None:
+        return _LLAMA_GENERATOR
+
+    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
+
+    from src.rag.pipeline import LlamaCppGenerator
+
+    _LLAMA_GENERATOR = LlamaCppGenerator(
+        model_path=str(_HERE / "models" / "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"),
+        n_gpu_layers=-1,
+        context_length=4096,
+    )
+
+    return _LLAMA_GENERATOR
+
+
+def get_rag_pipeline():
+    """
+    Lazily load and cache the RAG pipeline.
+
+    Uses GPU FAISS, CUDA embedder, CUDA CrossEncoder, and the shared cached
+    LLaMA generator.
+    """
+    global _RAG_PIPELINE
+
+    if _RAG_PIPELINE is not None:
+        return _RAG_PIPELINE
+
+    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
+
+    from src.embeddings.embedder import ArticleEmbedder
+    from src.embeddings.vector_store import FAISSVectorStore
+    from src.rag.pipeline import RAGPipeline
+    from src.rag.reranker import VocabAwareReranker
+    from src.rag.retriever import TwoStageRetriever
+
+    faiss_index_dir = _HERE / "data" / "faiss_index_1m_chunklevel"
+    if not faiss_index_dir.exists():
+        raise FileNotFoundError(f"FAISS index not found: {faiss_index_dir}")
+
+    vector_store = FAISSVectorStore.load(faiss_index_dir, use_gpu=True)
+
+    embedder = ArticleEmbedder(device="cuda")
+
+    reranker = VocabAwareReranker(
+        use_cross_encoder=True,
+        device="cuda",
+    )
+
+    retriever = TwoStageRetriever(
+        vector_store,
+        embedder,
+        reranker,
+        top_broad=100,
+        top_k=3,
+    )
+
+    generator = get_llama_generator()
+
+    _RAG_PIPELINE = RAGPipeline(retriever, generator)
+    return _RAG_PIPELINE
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -277,7 +358,7 @@ def generate_recommendations():
     data: Dict[str, Any] = request.get_json(silent=True) or {}
     query: str | None = (data.get("query") or "").strip() or None
 
-    faiss_index_dir = _HERE / "data" / "faiss_index"
+    faiss_index_dir = _HERE / "data" / "faiss_index_1m_chunklevel"
     if not faiss_index_dir.exists():
         # Fall back to whatever is already in the DB
         with get_db(DB_PATH) as conn:
@@ -288,21 +369,13 @@ def generate_recommendations():
         })
 
     try:
-        from src.embeddings.vector_store import FAISSVectorStore
-        from src.rag.pipeline import LlamaCppGenerator, RAGPipeline
-        from src.rag.retriever import TwoStageRetriever
         from src.rag.student_profile import StudentProfile
         from src.db.repositories import save_book_recommendations, upsert_book
 
         with get_db(DB_PATH) as conn:
             student = StudentProfile.from_db(user_id=user_id, conn=conn)
 
-        vector_store = FAISSVectorStore.load(faiss_index_dir)
-        retriever = TwoStageRetriever(vector_store)
-        generator = LlamaCppGenerator(
-            model_path=str(_HERE / "models" / "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"),
-        )
-        pipeline = RAGPipeline(retriever, generator)
+        pipeline = get_rag_pipeline()
 
         outputs = pipeline.recommend(
             query=query,
@@ -311,16 +384,60 @@ def generate_recommendations():
             student_profile=student,
         )
 
+        app.logger.info(
+            "Generated %d recommendations for user_id=%s level=%s query=%r",
+            len(outputs),
+            user_id,
+            student.base_level,
+            query,
+        )
+
+        for index, o in enumerate(outputs, start=1):
+            app.logger.info(
+                "Recommendation %d: title=%r coverage=%.4f difficulty=%.2f rationale=%r",
+                index,
+                o.title,
+                float(o.coverage_ratio),
+                float(o.difficulty_rating),
+                (o.rationale or "")[:120],
+            )
+
         with get_db(DB_PATH) as conn:
             profile_row = get_current_reading_profile(conn, user_id)
             profile_id = profile_row["profile_id"] if profile_row else None
             recs_to_save = []
             for o in outputs:
                 bid = upsert_book(conn, title=o.title)
+
+                coverage = min(max(float(o.coverage_ratio), 0.0), 1.0)
+
+                reason = (o.rationale or "").strip()
+                if coverage < 0.80:
+                    reason = (
+                        f"This article matches the topic, but it may be challenging for a "
+                        f"{student.base_level.capitalize()} reader because its known-word coverage "
+                        f"is only {coverage:.1%}. "
+                        f"{reason}"
+                    ).strip()
+                if not reason:
+                    if coverage >= 0.85:
+                        reason = (
+                            f"Recommended for a {student.base_level.capitalize()} reader because "
+                            f"its known-word coverage is {coverage:.1%}, making it a good vocabulary match."
+                        )
+                    else:
+                        reason = (
+                            f"Recommended mainly because it matches the topic, but it may be challenging: "
+                            f"known-word coverage is {coverage:.1%}."
+                        )
+
                 recs_to_save.append({
                     "book_id": bid,
-                    "match_score": min(o.coverage_ratio, 1.0),
-                    "reason": o.rationale,
+                    "recommended_level": student.base_level.capitalize(),
+                    "match_score": coverage,
+                    "known_word_ratio": coverage,
+                    "unknown_word_ratio": 1.0 - coverage,
+                    "reason": reason,
                 })
             save_book_recommendations(
                 conn, user_id=user_id,
@@ -331,18 +448,31 @@ def generate_recommendations():
 
         return jsonify({"recommendations": recs})
 
-    except ImportError:
+    except ImportError as exc:
+        app.logger.exception("RAG imports failed")
         with get_db(DB_PATH) as conn:
             recs = get_current_recommendations(conn, user_id, limit=3)
         return jsonify({
             "recommendations": recs,
-            "note": "RAG pipeline not available — showing existing recommendations.",
-        })
+            "note": "RAG pipeline imports failed — showing existing recommendations.",
+            "error": str(exc),
+        }), 500
+
+    except Exception as exc:
+        app.logger.exception("RAG recommendation generation failed")
+        with get_db(DB_PATH) as conn:
+            recs = get_current_recommendations(conn, user_id, limit=3)
+        return jsonify({
+            "recommendations": recs,
+            "note": "RAG recommendation generation failed — showing existing recommendations.",
+            "error": str(exc),
+        }), 500
 
 
 # ── User library ──────────────────────────────────────────────────────────────
 
 @app.route("/api/library", methods=["GET"])
+
 @login_required
 def get_library():
     user_id: int = session["user_id"]
@@ -401,26 +531,24 @@ def story_generate():
       genre    — adventure | mystery | fantasy | sci-fi | slice-of-life
       challenge — low | medium | high
     """
+    time_start = time.time()
     user_id: int = session["user_id"]
     data: Dict[str, Any] = request.get_json(silent=True) or {}
     topic: str | None = (data.get("topic") or "").strip() or None
     genre: str = (data.get("genre") or "adventure").strip()
-    challenge: str = (data.get("challenge") or "medium").strip()
+    challenge: str = (data.get("challenge") or "high").strip()
 
-    faiss_index_dir = _HERE / "data" / "faiss_index"
+    faiss_index_dir = _HERE / "data" / "faiss_index_1m_chunklevel"
 
     # ── Try real generation ──────────────────────────────────────────────────
     try:
-        from llama_cpp import Llama  # noqa: F401 — just probe availability
-        from src.rag.pipeline import LlamaCppGenerator
         from src.rag.student_profile import StudentProfile
 
         with get_db(DB_PATH) as conn:
             student = StudentProfile.from_db(user_id=user_id, conn=conn)
 
-        generator = LlamaCppGenerator(
-            model_path=str(_HERE / "models" / "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"),
-        )
+        generator = get_llama_generator()
+
         result = generator.generate_story(
             vocab_level=student.base_level,
             known_words=student.known_words(),
@@ -434,11 +562,21 @@ def story_generate():
             "new_vocab": result.new_vocab,
             "challenge_note": result.challenge_note,
             "vocab_level": result.vocab_level,
+            "was_revised": result.was_revised,
             "genre": result.genre,
             "challenge": result.challenge,
+            "known_word_ratio": result.known_word_ratio,
+            "unknown_word_ratio": result.unknown_word_ratio,
+            "new_word_count": result.new_word_count,
+            "total_word_count": result.total_word_count,
+            "target_known_range": list(result.target_known_range),
+            "within_target_range": result.within_target_range,
+            "actual_new_words": result.actual_new_words,
         }
 
-    except (ImportError, Exception):
+    except Exception as exc:
+        app.logger.exception("Story generation failed")
+        time_elapsed = time.time() - time_start
         # ── Stub response when model is not available ────────────────────────
         level_label = "beginner"
         with get_db(DB_PATH) as conn:
@@ -460,6 +598,7 @@ def story_generate():
             "vocab_level": level_label,
             "genre": genre,
             "challenge": challenge,
+            "was_revised": False,
         }
 
     _pending_stories[user_id] = story_data
@@ -506,4 +645,4 @@ def story_list():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_DEBUG", "0") == "1"
-    app.run(host="0.0.0.0", port=port, debug=debug)
+    app.run(host="0.0.0.0", port=port, debug=debug, threaded=False, use_reloader=False)

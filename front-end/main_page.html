@@ -9,6 +9,9 @@
         <title> My Little Library </title>
         <link rel="stylesheet" href="main_page_stylesheet.css">
     
+        <!-- Chart.js -->
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
         <!-- Basic Icons -->
         <link href="https://cdn.boxicons.com/3.0.8/fonts/basic/boxicons.min.css" rel="stylesheet">
         <!-- Filled Icons -->
@@ -42,7 +45,7 @@
                         
                         <!-- AVERAGE READING LVL GRAPH THAT'LL BE UPDATED -->
                          <div class="graph-box">
-                            <img id="profile-graph" src="/images/blank_graph.jpg" alt="">
+                            <canvas id="profile-graph"></canvas>
                          </div>
 
                          <div class="graph-info-box">
@@ -206,10 +209,6 @@
                                 <p id="story-text"></p>
 
                             </div>
-
-                            <!-- Button To Save The Story -->
-                            <input type="button" id="save-story-btn" class="btn save-story-btn" value="Save Story" style="display:none;">
-                            <p id="story-save-msg" style="color:#4caf50;display:none;margin:4px 0;"></p>
                         
                         </div>
                     </div>

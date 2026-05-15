@@ -1,50 +1,182 @@
 [
   {
-    "query": "football and soccer clubs and league seasons",
-    "relevant_ids": ["64539083", "64547658", "64523987", "64596339", "64516774"],
-    "level": "intermediate",
-    "note": "2020-21 Stoke City season, 2020 Toppserien, Aurora FC Canada, Coupe de France, North Mississauga SC"
+    "query": "animals and wildlife habitats",
+    "relevant_ids": [
+      "50659312",
+      "12523134",
+      "1765998",
+      "35264179",
+      "1810870"
+    ],
+    "level": "beginner",
+    "note": "John Hadley (philosopher), Wildlife of Tamil Nadu, Wildlife conservation, The Florida Wildlife Corridor, Reconciliation ecology"
   },
   {
-    "query": "spider and insect species taxonomy",
-    "relevant_ids": ["64519771", "64539539", "64587778", "64623945", "64595252"],
+    "query": "weather and seasons around the world",
+    "relevant_ids": [
+      "66577",
+      "13175810",
+      "1594522",
+      "49886036",
+      "85423"
+    ],
+    "level": "beginner",
+    "note": "Tropics, El Espinar, Langport, Lumbini Province, Lima"
+  },
+  {
+    "query": "famous landmarks and tourist attractions",
+    "relevant_ids": [
+      "99863",
+      "3368042",
+      "1647594",
+      "38389214",
+      "40008342"
+    ],
+    "level": "beginner",
+    "note": "Tourist attraction, List of tourist attractions in Paris, List of tourist attractions in Los Angeles, Lists of locally designated landmarks in the United States, List of South Korean tourist attractions"
+  },
+  {
+    "query": "popular sports and Olympic games",
+    "relevant_ids": [
+      "10210014",
+      "3434750",
+      "53900",
+      "31004883",
+      "147777"
+    ],
+    "level": "beginner",
+    "note": "Sport in Europe, United States, Multi-sport event, List of Olympic venues, Sports in Japan"
+  },
+  {
+    "query": "food and cooking traditions",
+    "relevant_ids": [
+      "50007184",
+      "15760517",
+      "39813261",
+      "1325731",
+      "38963391"
+    ],
+    "level": "beginner",
+    "note": "Mesoamerican feasts, Sociology of food, Balinese cuisine, Observance of Christmas by country, List of foods with religious symbolism"
+  },
+  {
+    "query": "space exploration and astronomy missions",
+    "relevant_ids": [
+      "31117122",
+      "16249824",
+      "15251125",
+      "64673600",
+      "56537103"
+    ],
+    "level": "intermediate",
+    "note": "Planetary Science Decadal Survey, List of European Space Agency programmes and missions, Science Mission Directorate, Douglas Vakoch, 2023 in spaceflight"
+  },
+  {
+    "query": "political leaders and government systems",
+    "relevant_ids": [
+      "55959",
+      "9476145",
+      "1692804",
+      "51256",
+      "89289"
+    ],
+    "level": "intermediate",
+    "note": "Politician, Party leader, Politics (Aristotle), Public choice, Yes Minister"
+  },
+  {
+    "query": "world war history and military battles",
+    "relevant_ids": [
+      "1495605",
+      "34915981",
+      "85017",
+      "56930271",
+      "148447"
+    ],
+    "level": "intermediate",
+    "note": "Hew Strachan, World War I memorials, List of battles 1901\u20132000, 5th Battalion, King's Own Yorkshire Light Infantry, List of military operations"
+  },
+  {
+    "query": "environmental issues and climate change",
+    "relevant_ids": [
+      "66020107",
+      "39689710",
+      "89844",
+      "66104755",
+      "35614913"
+    ],
+    "level": "intermediate",
+    "note": "IPCC Sixth Assessment Report, List of environmental conflicts, List of environmental issues, 2019 in climate change, Human rights and climate change"
+  },
+  {
+    "query": "music bands and album releases",
+    "relevant_ids": [
+      "50503036",
+      "3463805",
+      "9180524",
+      "40015666",
+      "4031601"
+    ],
+    "level": "intermediate",
+    "note": "Wasscass, Now That's What I Call Music! discography, Public Enemy discography, List of songs recorded by AC/DC, Rock Sound"
+  },
+  {
+    "query": "economics and financial market theory",
+    "relevant_ids": [
+      "41916",
+      "112577",
+      "3736784",
+      "10391173",
+      "50406"
+    ],
     "level": "advanced",
-    "note": "Pycnothelidae species list, Anochetus ghilianii ant, Entypesa andohahela spider, Nemesioidina clade, mollusks of Utah"
+    "note": "Financial market, Technical analysis, Market (economics), Gunduz Caginalp, Post-Keynesian economics"
   },
   {
-    "query": "pop music singles and song releases",
-    "relevant_ids": ["64506319", "64565681", "64596203", "64598873", "64558575"],
-    "level": "beginner",
-    "note": "Be Like That, Paralyzed (Delta Goodrem), Hello (Pop Smoke), Nobody's Love (Maroon 5), Puppet Man"
+    "query": "philosophy and ethics debates",
+    "relevant_ids": [
+      "50659312",
+      "34282681",
+      "3340881",
+      "1674993",
+      "10158889"
+    ],
+    "level": "advanced",
+    "note": "John Hadley (philosopher), Contemporary ethics, Environmental philosophy, Philosophy and economics, Philosophy of engineering"
   },
   {
-    "query": "painters and visual art history",
-    "relevant_ids": ["64514778", "64535650", "64512178", "64597748"],
-    "level": "intermediate",
-    "note": "Luce Turnier (Haitian painter), Louis Abel-Truchet (French painter), Queer art, Bridget R. Cooks (art historian)"
+    "query": "biochemistry and molecular biology",
+    "relevant_ids": [
+      "10262047",
+      "68140",
+      "57233472",
+      "16094935",
+      "3402144"
+    ],
+    "level": "advanced",
+    "note": "History of biochemistry, List of life sciences, Glossary of medicine, Annual Review of Biochemistry, Biomedical scientist"
   },
   {
-    "query": "court cases and criminal law",
-    "relevant_ids": ["64515138", "64551983"],
-    "level": "intermediate",
-    "note": "Facebook v. Duguid (Supreme Court TCPA case), Murder in Texas law"
+    "query": "constitutional law and court decisions",
+    "relevant_ids": [
+      "3398827",
+      "58792",
+      "1835845",
+      "34781059",
+      "56667439"
+    ],
+    "level": "advanced",
+    "note": "Michael C. Dorf, Judicial discretion, Judicial restraint, Federal Constitutional Court, Mechanisms of the English common law"
   },
   {
-    "query": "historical monuments castles and archaeological sites",
-    "relevant_ids": ["64545228", "64559074", "64541022", "64590464", "64614494"],
-    "level": "beginner",
-    "note": "Monument to Columbus Valladolid, Ashalim site, Forte Braschi Rome, Paghman Hill Castle, Monument to Onésimo Redondo"
-  },
-  {
-    "query": "political parties elections and campaigns",
-    "relevant_ids": ["64542872", "64620983", "64506904"],
-    "level": "intermediate",
-    "note": "2020 New Mexico Senate election, Tennessee 26th Senate district, Action for the Republic Catalonia"
-  },
-  {
-    "query": "natural disasters and emergency management",
-    "relevant_ids": ["64630044", "64536154"],
-    "level": "beginner",
-    "note": "Hurricane Hanna 2020, Resilience NSW disaster agency"
+    "query": "linguistics and language evolution",
+    "relevant_ids": [
+      "63630",
+      "66125804",
+      "31639507",
+      "9568471",
+      "48854"
+    ],
+    "level": "advanced",
+    "note": "Historical linguistics, Dieter Hillert, James Hurford, Biolinguistics, Linguistic typology"
   }
 ]
