@@ -2,8 +2,6 @@
 
 **My Little Library** is a vocabulary-aware reading recommender and story generator for students. It recommends Wikipedia-based reading material that is relevant to a student's topic interest while staying slightly above the student's current known-word level. The final system combines a reproducible Wikipedia data pipeline, exclusive grade-band vocabulary lists, sentence-transformer embeddings, FAISS vector search, vocabulary-aware reranking, SQLite-backed user profiles, a Flask web interface, and local LLaMA GGUF inference.
 
-This README is written for the final CS 322 project version and matches the final report/codebase rather than the earlier Deliverable 1-only pipeline.
-
 ---
 
 ## Project goals
