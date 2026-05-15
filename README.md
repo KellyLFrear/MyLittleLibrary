@@ -1,722 +1,764 @@
-# Intelligent Vocabulary Recommender System — My Little Library
+# My Little Library
 
-CSUSM Final Sprint Challenge project for building a vocabulary-aware reading recommender over a Wikipedia corpus.
+**My Little Library** is a vocabulary-aware reading recommender and story generator for students. It recommends Wikipedia-based reading material that is relevant to a student's topic interest while staying slightly above the student's current known-word level. The final system combines a reproducible Wikipedia data pipeline, exclusive grade-band vocabulary lists, sentence-transformer embeddings, FAISS vector search, vocabulary-aware reranking, SQLite-backed user profiles, a Flask web interface, and local LLaMA GGUF inference.
+
+This README is written for the final CS 322 project version and matches the final report/codebase rather than the earlier Deliverable 1-only pipeline.
 
 ---
 
-## Running the Web App
+## Project goals
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
+The system is designed to answer one practical educational question:
 
-# Start the Flask server (default port 5000)
-python app.py
+> Given a student profile and a topic, can the app recommend or generate reading material that is understandable but still introduces useful new vocabulary?
 
-# Then open http://localhost:5000 in your browser
+The implemented system supports:
+
+- user login/register and session-based Flask routes
+- beginner, intermediate, and advanced reading profiles
+- SQLite persistence for users, vocabulary knowledge, reading profiles, recommendations, user books, and saved stories
+- Wikipedia article preprocessing and vocabulary analysis
+- chunk-level embeddings using `all-MiniLM-L6-v2`
+- FAISS vector search over normalized embeddings
+- two-stage retrieval: broad semantic search followed by vocabulary-aware reranking
+- local LLaMA 3.1 8B Instruct GGUF generation through `llama-cpp-python`
+- generated recommendation explanations and personalized stories
+- RAG evaluation, retrieval ablation, ROUGE, optional BERTScore, and coverage-window metrics
+
+The project does **not** train QLoRA adapters. The generator is a pretrained/instruction-tuned LLaMA GGUF model used for local inference.
+
+---
+
+## Current architecture
+
+The repository is organized as a modular Flask application with an offline data/indexing pipeline and an online RAG inference pipeline.
+
+### Offline pipeline
+
+```text
+Wikipedia download
+  -> preprocessing
+  -> subword tokenization
+  -> vocabulary/readability analysis
+  -> sentence-aware chunking
+  -> sentence-transformer embedding
+  -> FAISS index + chunk metadata
 ```
 
-The web app provides:
-- **Login / Register** — create an account or sign in
-- **Profile page** — shows your name and current reading level
-- **Book Suggestions** — get book recommendations from the RAG pipeline (or type a topic)
-- **Your Library** — books you have added
-- **Add Book** — upload a book title and body text
-- **Search** — find books by title
-- **Generate Story** — generate a personalised story at your reading level
+### Online recommendation flow
 
-> **Note:** Story generation and new recommendation generation require the FAISS index
-> (`data/faiss_index/`) and a GGUF language model to be set up.
-> See the pipeline setup sections below for instructions.
-> Without them the app still runs — it shows existing DB recommendations and
-> a placeholder story.
-
-To seed test users with pre-built reading profiles and book recommendations:
-```bash
-python scripts/seed_test_users.py
-# credentials: test_beginner / test_intermediate / test_advanced — password: test123
+```text
+student login/profile
+  -> topic query or profile-driven recommendation request
+  -> query embedding
+  -> FAISS broad retrieval
+  -> vocabulary-aware reranking
+  -> LLaMA recommendation generation
+  -> SQLite save
+  -> frontend display
 ```
 
----
+### Main runtime components
 
-This repository now has a working **Deliverable 1 data pipeline** for:
-
-1. Building configurable known-word lists
-2. Downloading a Wikipedia subset
-3. Preprocessing the articles
-4. Tokenizing cleaned articles with an LLM-compatible subword tokenizer
-5. Running the vocabulary analysis module
-6. Producing candidate article rows by vocabulary level
-
----
-
-## 1. Project goal
-
-Given a student vocabulary level or known-word list, the system should identify Wikipedia articles that are:
-
-- mostly made of words the student already knows
-- include a small set of learnable new words
-- readable for the student's current level
-
-Current runtime vocabulary presets:
-
-- **Beginner**: 1,000 total known words
-- **Intermediate**: 3,000 total known words
-- **Advanced**: 6,000 total known words
-
-These runtime vocab files are **cumulative**:
-
-- `beginner_1000.txt` = beginner words only
-- `intermediate_3000.txt` = beginner + intermediate add-on words
-- `advanced_6000.txt` = beginner + intermediate + advanced add-on words
-
-Internal exclusive add-on bands used during construction:
-
-- beginner add-on = 1,000
-- intermediate add-on = 2,000
-- advanced add-on = 3,000
-
-This keeps the runtime totals aligned with the rubric while still modeling cumulative reader knowledge.
+| Component | Implementation |
+|---|---|
+| Web server | `app.py` using Flask |
+| Frontend | `front-end/index.html`, `main_page.html`, CSS, JS |
+| Relational database | SQLite via `src/db/schema.sql` and repositories |
+| Vocabulary analysis | `scripts/analyze_articles.py` |
+| Chunking | `src/embeddings/chunker.py` |
+| Embeddings | `src/embeddings/embedder.py` using `all-MiniLM-L6-v2` |
+| Vector store | `src/embeddings/vector_store.py` using FAISS `IndexFlatIP` |
+| Reranking | `src/rag/reranker.py` using semantic + vocabulary score |
+| Retrieval | `src/rag/retriever.py` two-stage/adaptive retrieval |
+| Generator | `src/rag/pipeline.py` `LlamaCppGenerator` |
+| CLI RAG test | `scripts/run_rag.py` |
+| CLI story test | `scripts/generate_story.py` |
+| Evaluation | `scripts/evaluate_rag.py` |
 
 ---
 
-## 2. Current repo structure
+## Repository structure
 
 ```text
 MyLittleLibrary/
-├── data/
-│   ├── raw/                          # raw Wikipedia parquet files
-│   ├── processed/                    # cleaned + tokenized Wikipedia parquet files
-│   └── vocab/                        # runtime vocab text files used by analysis
-│       ├── beginner_1000.txt
-│       ├── intermediate_3000.txt
-│       └── advanced_6000.txt
-├── outputs/
-│   ├── article_stats.jsonl
-│   ├── article_stats_50k.jsonl
-│   └── article_stats_100k.jsonl
-├── scripts/
-│   ├── build_vocab.py
-│   ├── build_vocab_lists.py
-│   ├── download_wiki.py
-│   ├── preprocess_wiki.py
-│   ├── tokenize_articles.py
-│   ├── analyze_articles.py
-│   └── check_article_stats.py
-├── vocab_sources/                    # source CSV/TXT vocab files
-├── vocab_output/                     # scored vocab CSVs + summary.json
-├── main.py
+├── app.py                              # Flask backend + API routes
+├── main.py                             # Convenience pipeline runner
+├── requirements.txt                    # Python dependencies used by final code
 ├── README.md
-└── requirements.txt
+├── data/
+│   ├── eval_queries.json               # 15 evaluation queries, 5 per level
+│   ├── raw/                            # small sample raw parquet included; full data ignored
+│   ├── processed/                      # small cleaned parquet included; full data ignored
+│   ├── vocab/                          # final runtime vocabulary text files
+│   └── vocab_sources/                  # source CSV vocabulary files
+├── front-end/
+│   ├── index.html                      # login/register page
+│   ├── main_page.html                  # book-style main UI
+│   ├── login.js
+│   ├── script.js
+│   ├── style.css
+│   ├── main_page_stylesheet.css
+│   └── images/
+├── scripts/
+│   ├── build_vocab_lists.py            # builds exclusive vocab bands
+│   ├── build_vocab.py                  # quick vocab size verification
+│   ├── download_wiki.py                # streams Wikipedia from Hugging Face datasets
+│   ├── preprocess_wiki.py              # cleans/filter articles
+│   ├── tokenize_articles.py            # HF or local GGUF tokenizer support
+│   ├── analyze_articles.py             # article-level coverage/readability metadata
+│   ├── build_index.py                  # chunk, embed, and save FAISS index
+│   ├── run_rag.py                      # command-line recommendation test
+│   ├── generate_story.py               # command-line story generation test
+│   ├── evaluate_rag.py                 # retrieval/generation/ablation evaluation
+│   ├── generate_eval_queries.py
+│   └── seed_test_users.py              # creates beginner/intermediate/advanced demo users
+└── src/
+    ├── db/
+    │   ├── connection.py
+    │   ├── repositories.py
+    │   └── schema.sql
+    ├── embeddings/
+    │   ├── chunker.py
+    │   ├── embedder.py
+    │   └── vector_store.py
+    └── rag/
+        ├── pipeline.py
+        ├── retriever.py
+        ├── reranker.py
+        └── student_profile.py
+```
+
+Large generated files are intentionally not committed by default. This includes the full Wikipedia parquet files, `outputs/`, the full FAISS index directories, SQLite database files, and local GGUF model files.
+
+---
+
+## Vocabulary design
+
+The final vocabulary files are **exclusive bands**:
+
+| File | Meaning |
+|---|---|
+| `data/vocab/beginner_1000.txt` | beginner-only K-5 band |
+| `data/vocab/intermediate_3000.txt` | intermediate-only grades 6-8 band |
+| `data/vocab/advanced_6000.txt` | advanced-only grades 9-12 band |
+
+The files themselves are not nested. At runtime, the analysis/indexing/profile code builds cumulative known-word sets when modeling a student:
+
+| Student level | Known-word set used for coverage |
+|---|---|
+| Beginner | beginner band |
+| Intermediate | beginner + intermediate bands |
+| Advanced | beginner + intermediate + advanced bands |
+
+This keeps the source vocabulary bands clean while still modeling the realistic assumption that an advanced reader also knows beginner and intermediate words.
+
+---
+
+## Coverage windows
+
+Known-word coverage is the main difficulty signal.
+
+| Mode | Target known-word range | Purpose |
+|---|---:|---|
+| RAG article recommendation | 85-97% | General recommendation target |
+| Story challenge: low | 95-98% | Mostly familiar text |
+| Story challenge: medium | 90-95% | Moderate vocabulary challenge |
+| Story challenge: high | 85-92% | Higher challenge |
+
+The weighted reranker uses the deployed scoring balance:
+
+```text
+final_score = 0.35 * semantic_score + 0.65 * vocabulary_fit_score
 ```
 
 ---
 
-## 3. What each script does
+## Setup
 
-### `scripts/build_vocab_lists.py`
-Builds vocabulary bands from source files in `vocab_sources/`.
+### 1. Create and activate a virtual environment
 
-Input:
-- source vocab CSV/TXT files
-- optional `banned_words.txt`
+Ubuntu/Linux:
 
-Recommended source CSV schema:
-
-```csv
-word,source_grade_hint,normalized_band,source_list,rank,count,academic,pos,notes
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
 ```
 
-Outputs:
-- `master_vocab_scored.csv`
-- exclusive add-on band CSVs:
-  - `beginner_band_1000.csv`
-  - `intermediate_band_2000.csv`
-  - `advanced_band_3000.csv`
-- cumulative runtime vocab files:
-  - `data/vocab/beginner_1000.txt`
-  - `data/vocab/intermediate_3000.txt`
-  - `data/vocab/advanced_6000.txt`
-- `summary.json`
-
-### `scripts/build_vocab.py`
-Quick verification script that checks the sizes of:
-
-- `data/vocab/beginner_1000.txt`
-- `data/vocab/intermediate_3000.txt`
-- `data/vocab/advanced_6000.txt`
-
-### `scripts/download_wiki.py`
-Downloads a Wikipedia subset and saves it as a parquet file in `data/raw/`.
-
-Current patched behavior:
-- supports `--sample-size`
-- supports `--output`
-- uses streaming for smaller debug-friendly pulls
-
-### `scripts/preprocess_wiki.py`
-Reads a raw wiki parquet, cleans text, removes disambiguation/stub-like pages, and writes a cleaned parquet.
-
-Current patched behavior:
-- supports `--input`
-- supports `--output`
-- supports `--min-words`
-
-### `scripts/tokenize_articles.py`
-Reads the cleaned wiki parquet and tokenizes each article with a Hugging Face / LLaMA-compatible tokenizer.
-
-Current intended behavior:
-- supports `--input`
-- supports `--output`
-- supports `--tokenizer`
-- supports `--max-length`
-- supports `--batch-size`
-
-Expected tokenization outputs in the parquet:
-- `llm_tokenizer_name`
-- `llm_input_ids_json`
-- `llm_attention_mask_json`
-- `llm_token_count`
-
-This script is the new Deliverable 1 step that prepares article text for actual LLM-style subword input instead of relying only on regex word tokenization.
-
-### `scripts/analyze_articles.py`
-Reads the tokenized wiki parquet and the three runtime vocab files, then computes:
-
-- total word count
-- unique word count
-- coverage ratio
-- new-word count/list
-- readability score
-- LLM token count if present
-- tokenizer name if present
-- word-to-LLM-token ratio if present
-- candidate flag based on a coverage window
-
-Current patched behavior:
-- supports `--input`
-- supports `--output`
-- supports optional custom vocab file paths
-- supports `--coverage-min`
-- supports `--coverage-max`
-
-Important note:
-- word-level regex tokenization is still used inside this script for vocabulary coverage because the project vocab files are stored as whole words
-- LLM subword tokenization now happens earlier in the pipeline inside `tokenize_articles.py`
-
-### `scripts/check_article_stats.py`
-Reads an article-stats JSONL file and prints:
-
-- first few rows
-- total rows by level
-- candidate rows by level
-- coverage statistics
-- readability statistics
-- simulated candidate counts for alternate windows
-
-Current patched behavior:
-- supports `--input`
-- supports `--preview-rows`
-- supports repeated `--window min:max`
-
----
-
-## 4. Environment setup
-
-### Windows PowerShell
-
-Create and activate a virtual environment:
+Windows PowerShell:
 
 ```powershell
 python -m venv .venv
-(Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned)
 .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip setuptools wheel
 ```
 
-Upgrade pip and install the packages needed for Deliverable 1:
+### 2. Install dependencies
 
-```powershell
-python -m pip install --upgrade pip
-python -m pip install pandas pyarrow datasets textstat transformers nltk
+```bash
+python -m pip install -r requirements.txt
 ```
 
-If your selected tokenizer depends on SentencePiece, also install:
+Notes:
 
-```powershell
-python -m pip install sentencepiece
-```
+- `requirements.txt` includes the core Flask/data/RAG/evaluation packages used by the code.
+- The listed `faiss-cpu` package lets the app run on CPU FAISS. To use GPU FAISS, install a CUDA-compatible FAISS build for the workstation environment.
+- `llama-cpp-python` must be built/installed with CUDA support if you want GPU offload for the GGUF model.
+- Do not commit Hugging Face tokens, `.env` files, local model files, local DB files, or generated FAISS indexes.
 
-Verify imports:
+### 3. Optional NLTK setup for readability scoring
 
-```powershell
-python -c "import pandas, pyarrow, datasets, textstat, transformers, nltk; print('deps ok')"
-```
-
-Because `analyze_articles.py` uses `textstat` for Flesch-Kincaid readability, download the NLTK pronunciation dictionary once before running the analysis step:
-
-```powershell
+```bash
 python -m nltk.downloader cmudict
 ```
 
 ---
 
-## 5. Vocabulary source setup
+## Quick demo without rebuilding the full index
 
-Place your vocab source files in `vocab_sources/`.
+This starts the Flask app and allows the UI/auth/database routes to run. If the FAISS index or GGUF model is missing, the app falls back to existing DB recommendations or placeholder story text.
 
-Recommended files:
+```bash
+python scripts/seed_test_users.py
+python app.py
+```
+
+Open:
 
 ```text
-vocab_sources/
-├── beginner_k_to_5.csv
-├── intermediate_6_to_8.csv
-├── advanced_9_to_12.csv
-└── banned_words.txt
+http://localhost:5000
 ```
 
-### Recommended grade-band strategy
+Demo accounts:
 
-Use flexible source labels in the CSV, but normalize internally to these three bands:
+| Username | Password | Level |
+|---|---|---|
+| `test_beginner` | `test123` | Beginner |
+| `test_intermediate` | `test123` | Intermediate |
+| `test_advanced` | `test123` | Advanced |
 
-- `k-5th grade`
-- `6-8`
-- `9-12`
-
-Example rows:
-
-```csv
-word,source_grade_hint,normalized_band,source_list,rank,count,academic,pos,notes
-water,K,K-5,fry_dolch,150,,false,noun,
-compare,7,6-8,ngsl,1800,,false,verb,
-analyze,10,9-12,coca,4200,,true,verb,
-```
+Important: `seed_test_users.py` can create users and vocabulary states with the committed vocab files. It only seeds article recommendations if `outputs/article_stats.jsonl` exists.
 
 ---
 
-## 6. Run the project through Deliverable 1 analysis
+## Full data pipeline
 
-## Step 1: Build the vocab lists
+Use these commands to reproduce the final-style corpus/index workflow.
 
-Build all vocab bands and write cumulative runtime vocab files:
+### 1. Build/verify vocabulary files
 
-```powershell
-python scripts/build_vocab_lists.py ^
-  --input vocab_sources ^
-  --output vocab_output ^
-  --runtime-vocab-dir data/vocab ^
+```bash
+python scripts/build_vocab_lists.py \
+  --input data/vocab_sources \
+  --output vocab_output \
+  --runtime-vocab-dir data/vocab \
   --only-band all
-```
 
-Expected summary pattern:
-
-- exclusive add-on band counts:
-  - beginner = 1000
-  - intermediate = 2000
-  - advanced = 3000
-- runtime total counts:
-  - beginner = 1000
-  - intermediate = 3000
-  - advanced = 6000
-
-Expected output files:
-
-```text
-vocab_output/
-├── master_vocab_scored.csv
-├── beginner_band_1000.csv
-├── intermediate_band_2000.csv
-├── advanced_band_3000.csv
-└── summary.json
-
-data/vocab/
-├── beginner_1000.txt
-├── intermediate_3000.txt
-└── advanced_6000.txt
-```
-
-### Optional single-band runs
-
-```powershell
-python scripts/build_vocab_lists.py --input vocab_sources --output vocab_output --runtime-vocab-dir data/vocab --only-band beginner
-python scripts/build_vocab_lists.py --input vocab_sources --output vocab_output --runtime-vocab-dir data/vocab --only-band intermediate
-python scripts/build_vocab_lists.py --input vocab_sources --output vocab_output --runtime-vocab-dir data/vocab --only-band advanced
-```
-
-If a band is slightly short while testing, you can temporarily allow it:
-
-```powershell
-python scripts/build_vocab_lists.py --input vocab_sources --output vocab_output --runtime-vocab-dir data/vocab --only-band intermediate --allow-shortfall
-```
-
----
-
-## Step 2: Verify vocab sizes
-
-```powershell
 python scripts/build_vocab.py
 ```
 
-Expected result:
+Expected runtime files:
 
 ```text
-Beginner Size: 1000
-Intermediate Size: 3000
-Advanced Size: 6000
+data/vocab/beginner_1000.txt
+data/vocab/intermediate_3000.txt
+data/vocab/advanced_6000.txt
 ```
 
----
+### 2. Download Wikipedia
 
-## Step 3: Download Wikipedia data
-
-### Small debug run
-
-```powershell
-python scripts/download_wiki.py --sample-size 500 --output data/raw/wiki_sample.parquet
-```
-
-### Larger debug run
-
-```powershell
-python scripts/download_wiki.py --sample-size 50000 --output data/raw/wiki_50k.parquet
-```
-
-### Full Deliverable 1 run
-
-```powershell
-python scripts/download_wiki.py --sample-size 100000 --output data/raw/wiki_100k.parquet
-```
-
----
-
-## Step 4: Preprocess the articles
-
-### Small sample
-
-```powershell
-python scripts/preprocess_wiki.py --input data/raw/wiki_sample.parquet --output data/processed/wiki_clean.parquet
-```
-
-### 50k raw run
-
-```powershell
-python scripts/preprocess_wiki.py --input data/raw/wiki_50k.parquet --output data/processed/wiki_50k_clean.parquet
-```
-
-### 100k raw run
-
-```powershell
-python scripts/preprocess_wiki.py --input data/raw/wiki_100k.parquet --output data/processed/wiki_100k_clean.parquet
-```
-
----
-
-## Step 5: Tokenize cleaned articles for LLM input
-
-This is the new pipeline step added for Deliverable 1 so the corpus is prepared with a real subword tokenizer before analysis.
-
-### Small sample
-
-```powershell
-python scripts/tokenize_articles.py --input data/processed/wiki_clean.parquet --output data/processed/wiki_tokenized.parquet --tokenizer meta-llama/Llama-3.1-8B-Instruct --max-length 2048
-```
-
-### 50k cleaned run
-
-```powershell
-python scripts/tokenize_articles.py --input data/processed/wiki_50k_clean.parquet --output data/processed/wiki_50k_tokenized.parquet --tokenizer meta-llama/Llama-3.2-1B-Instruct --max-length 2048
-```
-
-### 100k cleaned run
-
-```powershell
-python scripts/tokenize_articles.py --input data/processed/wiki_100k_clean.parquet --output data/processed/wiki_100k_tokenized.parquet --tokenizer models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf --max-length 2048
-```
-
-Expected effect:
-- the cleaned parquet is converted into a tokenized parquet
-- each row now includes LLM-oriented subword token data
-- `analyze_articles.py` can now report LLM token counts alongside word-level vocabulary coverage
-
----
-
-## Step 6: Analyze article vocabulary
-
-Current working candidate window for general Wikipedia debug/reporting runs:
-
-- `--coverage-min 0.45`
-- `--coverage-max 0.70`
-
-This is lower than the rubric example window of 0.90–0.97, but the window is configurable and this lower range produced usable candidate counts on the current Wikipedia corpus.
-
-### Small sample
-
-```powershell
-python scripts/analyze_articles.py --input data/processed/wiki_tokenized.parquet --output outputs/article_stats.jsonl --coverage-min 0.45 --coverage-max 0.70
-```
-
-### 50k tokenized run
-
-```powershell
-python scripts/analyze_articles.py --input data/processed/wiki_50k_tokenized.parquet --output outputs/article_stats_50k.jsonl --coverage-min 0.45 --coverage-max 0.70
-```
-
-### 100k tokenized run
-
-```powershell
-python scripts/analyze_articles.py --input data/processed/wiki_100k_tokenized.parquet --output outputs/article_stats_100k.jsonl --coverage-min 0.45 --coverage-max 0.70
-```
-
-### What analysis computes
-
-For each article and for each vocabulary level, the analyzer computes:
-
-- `Total_Words`
-- `Unique_Words`
-- `Coverage_Ratio`
-- `New_Word_Count`
-- `New_Words`
-- `Flesch_Kincaid_Grade`
-- `LLM_Token_Count`
-- `Tokenizer_Name`
-- `Word_to_LLM_Token_Ratio`
-- `Candidate`
-
-A row is a **candidate row** when its article coverage ratio falls within the configured coverage window for that level.
-
----
-
-## Step 7: Check the analysis output
-
-Small sample:
-
-```powershell
-python scripts/check_article_stats.py
-```
-
-50k tokenized run:
-
-```powershell
-python scripts/check_article_stats.py --input outputs/article_stats_50k.jsonl --window 0.45:0.70 --window 0.50:0.75 --window 0.55:0.80
-```
-
-100k tokenized run:
-
-```powershell
-python scripts/check_article_stats.py --input outputs/article_stats_100k.jsonl --window 0.45:0.70 --window 0.50:0.75 --window 0.55:0.80
-```
-
-This checks:
-
-- JSONL file exists
-- rows are written correctly
-- candidate counts look reasonable
-- coverage ratios are sensible by level
-- readability values are being computed
-- alternate windows can be compared without rerunning analysis
-
----
-
-## 7. Current working project results
-
-## Small sample run
-- raw sample downloaded: 500
-- cleaned articles kept: 259
-- article stats rows: 777
-
-## 50k raw run
-- raw sample downloaded: 50,000
-- cleaned articles kept: 28,203
-- article stats rows: 84,609
-
-## 100k raw run
-- raw sample downloaded: 100,000
-- cleaned articles kept: 55,256
-- article stats rows: 165,768
-
-This 100k raw run is the first run that produces **more than 50,000 cleaned articles**, which satisfies the rubric expectation for a minimum 50,000-article cleaned Wikipedia subset after preprocessing.
-
-### 100k cleaned run metrics using coverage window 0.45-0.70
-
-Rows by level:
-- Beginner: 55,256
-- Intermediate: 55,256
-- Advanced: 55,256
-
-Candidate rows by level:
-- Beginner: 30,414
-- Intermediate: 45,143
-- Advanced: 47,481
-
-Coverage ratio averages:
-- Beginner: 0.4457
-- Intermediate: 0.5056
-- Advanced: 0.5244
-
-Coverage trend is correct:
-- beginner < intermediate < advanced
-
-Simulated candidate rows for alternate windows:
-- window 0.45-0.70
-  - Beginner: 30,414
-  - Intermediate: 45,143
-  - Advanced: 47,481
-- window 0.50-0.75
-  - Beginner: 12,941
-  - Intermediate: 34,475
-  - Advanced: 39,387
-- window 0.55-0.80
-  - Beginner: 2,452
-  - Intermediate: 16,619
-  - Advanced: 23,419
-
----
-
-## 8. Deliverable 1 status
-
-The repository now supports:
-
-- configurable beginner/intermediate/advanced vocab lists
-- cumulative runtime known-word files
-- reproducible raw Wikipedia download
-- reproducible preprocessing
-- reproducible LLM-compatible subword tokenization of cleaned articles
-- article-level vocabulary analysis
-- candidate filtering by configurable known-word coverage
-- analysis summaries over a 50k+ cleaned article corpus
-
-This covers the core of **Deliverable 1** before embeddings/vector search are added.
-
----
-
-## 9. Next steps after Step 6 / Deliverable 1 analysis
-
-The next work should be:
-
-1. Save corpus summary statistics for the report
-2. Inspect extreme readability outliers
-3. Chunk articles for embedding generation
-4. Generate dense embeddings
-5. Build a vector index
-6. Add retrieval and vocabulary-aware re-ranking
-7. Connect the retrieval stage to the recommendation generator
-
----
-
-## 10. Common problems
-
-### `ModuleNotFoundError: No module named 'textstat'`
-
-```powershell
-python -m pip install textstat
-```
-
-### `ModuleNotFoundError: No module named 'datasets'`
-
-```powershell
-python -m pip install datasets
-```
-
-### `ModuleNotFoundError: No module named 'transformers'`
-
-```powershell
-python -m pip install transformers
-```
-
-### `analyze_articles.py` fails with a `cmudict` or NLTK corpus error
-
-```powershell
-python -m pip install nltk
-python -m nltk.downloader cmudict
-```
-
-### Some tokenizers fail because SentencePiece is not installed
-
-```powershell
-python -m pip install sentencepiece
-```
-
-### `Unable to find a usable engine` for parquet
-
-```powershell
-python -m pip install pyarrow
-```
-
-### PowerShell does not like bash-style heredoc commands
-
-Use a Python script file such as `scripts/check_article_stats.py` instead of:
+Small debug run:
 
 ```bash
+python scripts/download_wiki.py \
+  --sample-size 500 \
+  --output data/raw/wiki_sample.parquet
+```
+
+Full final-style run:
+
+```bash
+python scripts/download_wiki.py \
+  --sample-size 1000000 \
+  --output data/raw/wiki_1m.parquet
+```
+
+### 3. Preprocess articles
+
+```bash
+python scripts/preprocess_wiki.py \
+  --input data/raw/wiki_1m.parquet \
+  --output data/processed/wiki_clean.parquet \
+  --min-words 150
+```
+
+### 4. Tokenize articles
+
+Using a Hugging Face tokenizer:
+
+```bash
+python scripts/tokenize_articles.py \
+  --input data/processed/wiki_clean.parquet \
+  --output data/processed/wiki_tokenized.parquet \
+  --tokenizer sentence-transformers/all-MiniLM-L6-v2 \
+  --max-length 2048 \
+  --batch-size 32
+```
+
+Using a local GGUF tokenizer instead:
+
+```bash
+python scripts/tokenize_articles.py \
+  --input data/processed/wiki_clean.parquet \
+  --output data/processed/wiki_tokenized.parquet \
+  --gguf-path models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf \
+  --max-length 2048 \
+  --batch-size 32
+```
+
+### 5. Analyze vocabulary coverage and readability
+
+```bash
+mkdir -p outputs
+
+python scripts/analyze_articles.py \
+  --input data/processed/wiki_tokenized.parquet \
+  --output outputs/article_stats_1m.jsonl \
+  --coverage-min 0.85 \
+  --coverage-max 0.97
+```
+
+For a smaller committed/sample run, use the sample paths:
+
+```bash
+python scripts/analyze_articles.py \
+  --input data/processed/wiki_clean.parquet \
+  --output outputs/article_stats.jsonl \
+  --coverage-min 0.85 \
+  --coverage-max 0.97
+```
+
+### 6. Check article statistics
+
+```bash
+python scripts/check_article_stats.py \
+  --input outputs/article_stats_1m.jsonl \
+  --window 0.85:0.97 \
+  --window 0.90:0.97 \
+  --window 0.45:0.70
+```
+
+### 7. Build the FAISS index
+
+For the Flask app's default path:
+
+```bash
+python scripts/build_index.py \
+  --articles outputs/article_stats_1m.jsonl \
+  --index-dir data/faiss_index_1m_chunklevel \
+  --model all-MiniLM-L6-v2 \
+  --chunk-size 400 \
+  --overlap 50 \
+  --batch-size 256 \
+  --device cuda
+```
+
+For a smaller local/debug path:
+
+```bash
+python scripts/build_index.py \
+  --articles outputs/article_stats.jsonl \
+  --index-dir data/faiss_index \
+  --device cuda
+```
+
+The app currently looks for:
+
+```text
+data/faiss_index_1m_chunklevel/
+```
+
+If you build a different index path, either rename/copy that folder or update `faiss_index_dir` in `app.py`.
+
+---
+
+## Local LLaMA model setup
+
+The Flask app expects the local model at:
+
+```text
+models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+```
+
+The expected model family is:
+
+```text
+Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+Bartowski GGUF release
+loaded through llama-cpp-python
+context window: 4096
+n_gpu_layers: -1
+```
+
+Create the model directory and place the GGUF file there:
+
+```bash
+mkdir -p models
+# copy or download the GGUF file into models/
+```
+
+The app uses a single visible GPU by default through `CUDA_VISIBLE_DEVICES=0`. The CLI/evaluation scripts support explicit GPU visibility and tensor splitting:
+
+```bash
+python scripts/run_rag.py \
+  --index-dir data/faiss_index_1m_chunklevel \
+  --query "space and planets" \
+  --level intermediate \
+  --filename models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf \
+  --cuda-visible-devices 0,1 \
+  --tensor-split 0.5 0.5 \
+  --n-gpu-layers -1
+```
+
+---
+
+## Run the web app
+
+```bash
+python scripts/seed_test_users.py
+python app.py
+```
+
+The server listens on:
+
+```text
+http://localhost:5000
+```
+
+The app routes include:
+
+| Route | Purpose |
+|---|---|
+| `POST /api/auth/register` | create an account |
+| `POST /api/auth/login` | login |
+| `POST /api/auth/logout` | logout |
+| `GET /api/profile` | current profile and reading history |
+| `GET /api/recommendations` | current saved recommendations |
+| `POST /api/recommendations/generate` | run RAG recommendation generation |
+| `GET /api/library` | list user library books |
+| `POST /api/library` | add a user book |
+| `GET /api/books/search?q=...` | search books by title |
+| `POST /api/story/generate` | generate a story |
+| `POST /api/story/save` | save most recent generated story |
+| `GET /api/story/list` | list saved stories |
+
+---
+
+## Command-line RAG tests
+
+Topic-query mode:
+
+```bash
+python scripts/run_rag.py \
+  --index-dir data/faiss_index_1m_chunklevel \
+  --query "space and planets" \
+  --level intermediate \
+  --top-k 3 \
+  --top-broad 100 \
+  --filename models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+```
+
+Profile-driven mode using a seeded user:
+
+```bash
+python scripts/run_rag.py \
+  --index-dir data/faiss_index_1m_chunklevel \
+  --user-id 1 \
+  --top-k 3 \
+  --filename models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+```
+
+Simulate vocabulary growth after reading a result:
+
+```bash
+python scripts/run_rag.py \
+  --index-dir data/faiss_index_1m_chunklevel \
+  --query "animals and habitats" \
+  --level beginner \
+  --simulate-growth \
+  --filename models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+```
+
+---
+
+## Command-line story generation
+
+```bash
+python scripts/generate_story.py \
+  --level intermediate \
+  --topic "space" \
+  --genre sci-fi \
+  --challenge medium \
+  --target-words 400 \
+  --max-new-vocab 10 \
+  --filename models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+```
+
+Using a database-backed profile:
+
+```bash
+python scripts/generate_story.py \
+  --user-id 2 \
+  --topic "space" \
+  --genre sci-fi \
+  --challenge medium \
+  --filename models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+```
+
+---
+
+## Evaluation and ablation
+
+The committed `data/eval_queries.json` contains 15 evaluation queries: 5 beginner, 5 intermediate, and 5 advanced.
+
+### Retrieval-only evaluation
+
+```bash
+python scripts/evaluate_rag.py \
+  --index-dir data/faiss_index_1m_chunklevel \
+  --queries data/eval_queries.json \
+  --output outputs/eval_weighted_rerank.json \
+  --mode weighted_rerank \
+  --skip-generation \
+  --top-broad 100
+```
+
+### Ablation modes
+
+```bash
+python scripts/evaluate_rag.py \
+  --index-dir data/faiss_index_1m_chunklevel \
+  --queries data/eval_queries.json \
+  --output outputs/eval_semantic_only.json \
+  --mode semantic_only \
+  --skip-generation
+
+python scripts/evaluate_rag.py \
+  --index-dir data/faiss_index_1m_chunklevel \
+  --queries data/eval_queries.json \
+  --output outputs/eval_coverage_filter.json \
+  --mode coverage_filter \
+  --skip-generation
+
+python scripts/evaluate_rag.py \
+  --index-dir data/faiss_index_1m_chunklevel \
+  --queries data/eval_queries.json \
+  --output outputs/eval_weighted_rerank.json \
+  --mode weighted_rerank \
+  --skip-generation
+```
+
+### Generation metrics
+
+```bash
+python scripts/evaluate_rag.py \
+  --index-dir data/faiss_index_1m_chunklevel \
+  --queries data/eval_queries.json \
+  --output outputs/eval_generation.json \
+  --mode weighted_rerank \
+  --with-bertscore \
+  --filename models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf \
+  --generation-top-k 3
+```
+
+The evaluation script reports:
+
+- Precision@5, Precision@10, Precision@20
+- Recall@5, Recall@10, Recall@20
+- MRR
+- percentage of top results inside the target coverage window
+- ROUGE-1, ROUGE-2, ROUGE-L when generation is enabled
+- optional BERTScore precision/recall/F1
+- structured output validity rate
+
+---
+
+## Final report alignment
+
+The final report describes the full intended run with approximately:
+
+| Pipeline stage | Count |
+|---|---:|
+| Downloaded Wikipedia articles | 1,000,000 |
+| Cleaned usable articles | 628,652 |
+| Word-tokenized articles | 628,652 |
+| Subword-tokenized articles | 628,652 |
+| Generated article chunks | 1,682,652 |
+| FAISS vectors | 1,682,652 |
+
+The submitted zip contains a small sample parquet and final source code, not the full generated data/index/model artifacts. Rebuild or copy the external artifacts before running the full RAG demo.
+
+The final report's retrieval table lists these retrieval metrics for the completed evaluation run:
+
+| Metric | @5 | @10 | @20 |
+|---|---:|---:|---:|
+| Precision@k | 0.2533 | 0.2067 | 0.1600 |
+| Recall@k | 0.2533 | 0.4133 | 0.6400 |
+| MRR | 0.5534 | - | - |
+
+If additional evaluation runs are completed, update the report placeholders and README metrics together so the report, code, and repository stay consistent.
+
+---
+
+## Important implementation notes
+
+### Pretrained LLaMA, not QLoRA training
+
+The code uses `LlamaCppGenerator` for inference with a pretrained/instruction-tuned GGUF model. There are no project-specific QLoRA training scripts, adapter checkpoints, training epochs, optimizer states, or LoRA merge steps in this repository.
+
+### FAISS CPU/GPU behavior
+
+`FAISSVectorStore` uses `IndexFlatIP` over normalized vectors. It attempts GPU FAISS if available and falls back to CPU FAISS if GPU functions are unavailable.
+
+### App first-request latency
+
+The app lazily loads the RAG pipeline and LLaMA generator. The first recommendation/story request can be slow because it may initialize:
+
+- FAISS index and `chunks.pkl`
+- sentence-transformer embedder
+- cross-encoder reranker
+- local LLaMA GGUF model
+
+For demos, start the app early or run one warm-up request before presenting.
+
+### Large index bottlenecks
+
+For the full million-article index, the main bottlenecks are expected to be:
+
+- loading large chunk metadata from pickle
+- GPU transfer time for FAISS index
+- cross-encoder reranking over broad candidate pools
+- first LLaMA model load
+- Flask configured with `threaded=False`
+
+Practical demo optimizations:
+
+- keep `top_broad` near 100 or lower
+- use `--no-cross-encoder` for faster CLI tests
+- warm the model/index before the demo
+- consider approximate FAISS search for larger deployments
+- move chunk metadata into SQLite or memory-mapped storage later
+
+---
+
+## Troubleshooting
+
+### `FAISS index not found`
+
+The web app expects:
+
+```text
+data/faiss_index_1m_chunklevel/
+```
+
+Build it with `scripts/build_index.py`, copy it into that path, or edit `app.py` to point to your local index directory.
+
+### Story generation returns placeholder text
+
+The GGUF model is missing or `llama-cpp-python` is not configured correctly. Confirm this file exists:
+
+```text
+models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+```
+
+Then verify llama-cpp-python can load it.
+
+### CUDA/GPU is not being used
+
+Check GPU visibility:
+
+```bash
+nvidia-smi
 python - <<'PY'
-...
+import torch
+print(torch.cuda.is_available())
+print(torch.cuda.device_count())
+for i in range(torch.cuda.device_count()):
+    print(i, torch.cuda.get_device_name(i))
 PY
 ```
 
-### Hugging Face warning about unauthenticated requests
+For CLI tests, explicitly pass:
 
-The Wikipedia downloads still work without a token, but larger Hub requests may be slower or more rate-limited.
+```bash
+--cuda-visible-devices 0
+```
 
-Later, when needed for larger or repeated runs:
+or for two visible GPUs:
 
-```powershell
+```bash
+--cuda-visible-devices 0,1 --tensor-split 0.5 0.5
+```
+
+### `ModuleNotFoundError`
+
+Install requirements inside the active virtual environment:
+
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+### `cmudict` or readability errors
+
+```bash
+python -m nltk.downloader cmudict
+```
+
+### Hugging Face rate-limit or gated model issues
+
+Use Hugging Face authentication only on your machine/environment:
+
+```bash
 hf auth login
 ```
 
-Do **not** hardcode tokens into source files or commit them to git.
+Never commit tokens into the repository.
 
 ---
 
-## 11. Suggested requirements.txt for current pipeline
+## Suggested final submission checklist
 
-At minimum for Steps 1 through 6:
+Before submitting or demoing:
 
-```txt
-pandas
-pyarrow
-datasets
-textstat
-transformers
-nltk
-```
-
-If your tokenizer needs it, also include:
-
-```txt
-sentencepiece
-```
-
-A more exact frozen version can be generated with:
-
-```powershell
-python -m pip freeze > requirements.txt
-```
-
----
-
-## 12. Suggested git workflow
-
-Before committing, verify:
-
-```powershell
+```bash
+python -m py_compile $(find . -name '*.py' -not -path './.venv/*')
 python scripts/build_vocab.py
-python scripts/check_article_stats.py --input outputs/article_stats_100k.jsonl --window 0.45:0.70 --window 0.50:0.75 --window 0.55:0.80
+python scripts/seed_test_users.py
+python app.py
 ```
 
-Recommended commit checkpoints:
+Also verify that these external artifacts exist for the full RAG demo:
 
-- vocab source files added
-- runtime vocab files generated
-- wiki download working
-- preprocessing working
-- tokenization working
-- analysis output generated
-- README and requirements updated
+```text
+models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+data/faiss_index_1m_chunklevel/index.faiss
+data/faiss_index_1m_chunklevel/chunks.pkl
+data/faiss_index_1m_chunklevel/meta.json
+outputs/article_stats_1m.jsonl
+```
 
 ---
 
-## 13. Notes
+## Team contribution summary
 
-- The 500-article run is only for debugging.
-- The 50k raw run did **not** survive cleaning at the 50k threshold.
-- The 100k raw run produced **55,256 cleaned articles**, which is the current rubric-safe corpus size.
-- General Wikipedia is harder than a learner-targeted reading corpus, so a lower temporary coverage window was used for analysis.
-- The final repository should keep very large processed corpora or vector indexes out of git if they are too large.
+- Frontend and UI: login page, book-style main page, profile display, library controls, and styling.
+- Data pipeline: Wikipedia download, preprocessing, tokenization, vocabulary analysis, and corpus preparation.
+- Backend and RAG: Flask routes, SQLite schema/repositories, FAISS vector store, retrieval/reranking, LLaMA generation, story generation, evaluation scripts, and GPU inference testing.
+
+---
+
+## License / academic use
+
+This repository is an academic CS 322 project. Model files, Wikipedia data, and Hugging Face resources may have their own licenses or access restrictions. Keep large external artifacts and private tokens out of git.
