@@ -42,6 +42,7 @@ import os
 import sys
 import textwrap
 from pathlib import Path
+import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -60,12 +61,13 @@ def _load_profile(args, db_path: str) -> tuple[str, set]:
         return args.level, set()
 
 
-def _print_story(result) -> None:
+def _print_story(result, time_elapsed) -> None:
     width = 72
     print()
     print("=" * width)
     print(f"  {result.title}")
     print(f"  Level: {result.vocab_level}  |  Genre: {result.genre}  |  Challenge: {result.challenge}")
+    print(f"  Time elapsed: {time_elapsed:.2f} seconds")
     print("=" * width)
     print()
     # Wrap story body for readability
@@ -164,6 +166,7 @@ def main() -> None:
         "--db-path", default="data/library.db",
         help="Path to the SQLite database (default: data/library.db)",
     )
+    time_start = time.time()
 
     args = p.parse_args()
 
@@ -206,7 +209,8 @@ def main() -> None:
         max_new_vocab=args.max_new_vocab,
     )
 
-    _print_story(result)
+    time_elapsed = time.time() - time_start
+    _print_story(result, time_elapsed)
 
 
 if __name__ == "__main__":

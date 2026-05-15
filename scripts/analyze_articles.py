@@ -16,7 +16,13 @@ Each tokenized article is analyzed three separate times:
 2) once using the intermediate vocabulary
 3) once using the advanced vocabulary
 
-That is why you saw the same number of rows for all three levels.
+Student known-word coverage is cumulative:
+- Beginner readers know the beginner band
+- Intermediate readers know beginner + intermediate bands
+- Advanced readers know beginner + intermediate + advanced bands
+
+That is why each article is still analyzed once per level, but the known-word
+set grows as the level increases.
 """
 
 from __future__ import annotations
@@ -29,6 +35,12 @@ from typing import Dict
 
 import pandas as pd
 import textstat
+import nltk
+
+try:
+    nltk.data.find("corpora/cmudict")
+except LookupError:
+    nltk.download("cmudict")
 
 
 DEFAULT_INPUT = "data/processed/wiki_tokenized.parquet"
@@ -191,6 +203,44 @@ def iter_vocab_paths(args: argparse.Namespace) -> Dict[str, str]:
         "Advanced": args.advanced_vocab,
     }
 
+def build_cumulative_known_sets(vocab_paths: Dict[str, str]) -> Dict[str, set[str]]:
+    """
+    Load exclusive vocabulary bands and convert them into cumulative known-word sets.
+
+
+    Runtime vocabulary files are intentionally NOT cumulative:
+    - Beginner file = beginner-only band
+    - Intermediate file = intermediate-only band
+    - Advanced file = advanced-only band
+
+
+    Reading coverage, however, should be cumulative because an advanced reader
+    is expected to know beginner and intermediate vocabulary too.
+    """
+    beginner_band = load_word_list(vocab_paths["Beginner"])
+    intermediate_band = load_word_list(vocab_paths["Intermediate"])
+    advanced_band = load_word_list(vocab_paths["Advanced"])
+
+
+    known_sets = {
+        "Beginner": beginner_band,
+        "Intermediate": beginner_band | intermediate_band,
+        "Advanced": beginner_band | intermediate_band | advanced_band,
+    }
+
+
+    print("Vocabulary band sizes:")
+    print(f"  Beginner band: {len(beginner_band):,}")
+    print(f"  Intermediate band: {len(intermediate_band):,}")
+    print(f"  Advanced band: {len(advanced_band):,}")
+
+
+    print("Cumulative known-word sizes:")
+    for level in ("Beginner", "Intermediate", "Advanced"):
+        print(f"  {level}: {len(known_sets[level]):,}")
+
+
+    return known_sets
 
 def analyze_articles(
     input_path: str = DEFAULT_INPUT,
@@ -200,7 +250,13 @@ def analyze_articles(
     coverage_max: float = DEFAULT_COVERAGE_MAX,
 ) -> None:
     """
-    Analyze each article against each vocabulary list.
+    Analyze each article against cumulative known-word sets.
+
+    The input vocabulary files are exclusive bands, but each reader level uses
+    cumulative known-word coverage:
+    - Beginner = beginner band
+    - Intermediate = beginner + intermediate bands
+    - Advanced = beginner + intermediate + advanced bands
 
     For every (article, level) pair this script computes:
     - Total_Words: total number of word-level tokens
@@ -234,12 +290,14 @@ def analyze_articles(
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
+    known_sets=build_cumulative_known_sets(vocab_paths)
+
     with output_file.open("w", encoding="utf-8") as f:
         # Loop once per level. This is why all three levels end up with the same
         # number of rows: every article is evaluated for every level.
-        for level, vocab_path in vocab_paths.items():
+        # the key difference is that known_word is now cumulative, so coverage ratios increase as the level increases.
+        for level,known_words in known_sets.items():
             print(f"Processing {level} level...")
-            known_words = load_word_list(vocab_path)
 
             # Loop through all cleaned/tokenized articles.
             for _, row in df.iterrows():

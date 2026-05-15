@@ -153,6 +153,17 @@ body {
 /* Moves The Button Section Down */
 .profile-page .btn-box {
     margin-top: 1.2rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: .75rem;
+    flex-wrap: nowrap;
+    width: 100%;
+}
+
+.profile-page .btn-box .btn {
+    margin: 0;
+    width: 8.75rem;
 }
 
 /* Buttons On Profile Page */
@@ -228,6 +239,12 @@ body {
     transform: rotateY(180deg) translateZ(1px);
 }
 
+.book-page .page-front,
+.book-page .page-back {
+    overflow: hidden;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
 
 /* Book Suggestion Page */
 /* Title */
@@ -284,6 +301,33 @@ body {
 /* Book Icon */
 .bookbox-content .bx-book {
     margin-right: .4rem;
+}
+
+#turn-1 .page-front {
+    display: flex;
+    flex-direction: column;
+}
+
+#suggestions-list {
+    flex: 1 1 auto;
+    max-height: 27rem;
+    overflow-y: auto;
+    padding-right: .5rem;
+}
+
+.suggestion-generator-box {
+    flex: 0 0 auto;
+    margin-top: .75rem;
+    padding: .5rem 0 0;
+}
+
+.bookbox-content {
+    font-size: .9rem;
+}
+
+.bookbox-content p {
+    font-size: .82rem;
+    line-height: 1.35;
 }
 
 /* Moves Generator Box */

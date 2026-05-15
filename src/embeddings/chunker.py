@@ -6,8 +6,12 @@ Chunking strategy:
     without excessively growing index size.
   - Sentence-boundary aware: chunks only close at a sentence boundary, so
     semantic units are never split mid-thought.
-  - Vocabulary metadata is inherited from the parent article so the reranker
-    can score chunks without recomputing per-chunk coverage.
+
+Vocabulary metadata:
+  - chunk_article() initially copies article-level metadata into each chunk.
+  - scripts/build_index.py should recompute coverage_ratio and new_words at
+    the chunk level before embedding/saving the FAISS index.
+  - This makes recommendations score the selected passage, not the full article.
 """
 from __future__ import annotations
 
